@@ -1162,7 +1162,7 @@ int CalculateCollisionsLeft(int64_t nodes, const SearchParams& params) {
 
 void SearchWorker::GatherMinibatch() {
   // Total number of nodes to process.
-  int minibatch_size = 0;
+  uint32_t minibatch_size = 0;
   int cur_n = 0;
   {
     SharedMutex::Lock lock(search_->nodes_mutex_);
@@ -1172,7 +1172,7 @@ void SearchWorker::GatherMinibatch() {
   // applied, which doesn't clearly make sense to include here...
   int64_t remaining_n =
       latest_time_manager_hints_.GetEstimatedRemainingPlayouts();
-  int collisions_left = CalculateCollisionsLeft(
+  uint32_t collisions_left = CalculateCollisionsLeft(
       std::min(static_cast<int64_t>(cur_n), remaining_n), params_);
 
   // Number of nodes processed out of order.
@@ -2091,21 +2091,13 @@ void SearchWorker::DoBackupUpdate() {
 }
 
 bool SearchWorker::MaybeAdjustForTerminalOrTransposition(
-    Node* n, int nr, int nm, const LowNode* nl, float& v, float& d, float& m,
+    Node* n, const LowNode* nl, float& v, float& d, float& m,
     uint32_t& n_to_fix, float& v_delta, float& d_delta, float& m_delta,
     bool& update_parent_bounds) const {
   if (n->IsTerminal()) {
     v = n->GetWL();
     d = n->GetD();
     m = n->GetM();
-
-    return true;
-  }
-
-  if (nr > 0) {
-    v = 0.0f;
-    d = 1.0f;
-    m = nm;
 
     return true;
   }
@@ -2182,8 +2174,8 @@ void SearchWorker::DoBackupUpdateSingleNode(
                             node_to_process.multivisit);
   }
 
-  if (!MaybeAdjustForTerminalOrTransposition(n, nr, nm, nl, v, d, m, n_to_fix,
-                                             v_delta, d_delta, m_delta,
+  if (!MaybeAdjustForTerminalOrTransposition(n, nl, v, d, m, n_to_fix, v_delta,
+                                             d_delta, m_delta,
                                              update_parent_bounds)) {
     // If there is nothing better, use original NN values adjusted for node.
     v = -nl->GetWL();
@@ -2194,13 +2186,20 @@ void SearchWorker::DoBackupUpdateSingleNode(
   // Backup V value up to a root. After 1 visit, V = Q.
   for (auto it = path.crbegin(); it != path.crend();
        /* ++it in the body */) {
-    n = std::get<0>(*it);
-
     n->FinalizeScoreUpdate(v, d, m, node_to_process.multivisit);
     if (n_to_fix > 0 && !n->IsTerminal()) {
       // Number of visits may decrease above transposition low node.
       n_to_fix = std::min(n_to_fix, n->GetN());
       n->AdjustForTerminal(v_delta, d_delta, m_delta, n_to_fix);
+    }
+
+    // Stop delta update on repetition "terminal" and propagate a draw above.
+    // Only do this after edge update to have good values if play goes here.
+    if (nr > 0) {
+      n_to_fix = 0;
+      v = 0.0f;
+      d = 1.0f;
+      m = nm;
     }
 
     // Nothing left to do without ancestors to update.
@@ -2235,8 +2234,8 @@ void SearchWorker::DoBackupUpdateSingleNode(
     v_delta = -v_delta;
     m++;
 
-    MaybeAdjustForTerminalOrTransposition(p, pr, pm, pl, v, d, m, n_to_fix,
-                                          v_delta, d_delta, m_delta,
+    MaybeAdjustForTerminalOrTransposition(p, pl, v, d, m, n_to_fix, v_delta,
+                                          d_delta, m_delta,
                                           update_parent_bounds);
 
     // Update the stats.
@@ -2254,6 +2253,10 @@ void SearchWorker::DoBackupUpdateSingleNode(
       search_->current_best_edge_ =
           search_->GetBestChildNoTemperature(search_->root_node_, 0);
     }
+
+    n = p;
+    nr = pr;
+    nm = pm;
   }
   search_->total_playouts_ += node_to_process.multivisit;
   search_->cum_depth_ +=
