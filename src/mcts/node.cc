@@ -384,12 +384,13 @@ bool Node::TryStartScoreUpdate() {
   return true;
 }
 
-void Node::CancelScoreUpdate(int multivisit) {
+void Node::CancelScoreUpdate(uint32_t multivisit) {
   assert(GetNInFlight() >= (uint32_t)multivisit);
   n_in_flight_.fetch_sub(multivisit, std::memory_order_acq_rel);
 }
 
-void LowNode::FinalizeScoreUpdate(float v, float d, float m, int multivisit) {
+void LowNode::FinalizeScoreUpdate(float v, float d, float m,
+                                  uint32_t multivisit) {
   assert(edges_);
   // Recompute Q.
   wl_ += multivisit * (v - wl_) / (n_ + multivisit);
@@ -400,14 +401,17 @@ void LowNode::FinalizeScoreUpdate(float v, float d, float m, int multivisit) {
   n_ += multivisit;
 }
 
-void LowNode::AdjustForTerminal(float v, float d, float m, int multivisit) {
+void LowNode::AdjustForTerminal(float v, float d, float m,
+                                uint32_t multivisit) {
+  assert(static_cast<uint32_t>(multivisit) <= n_);
+
   // Recompute Q.
   wl_ += multivisit * v / n_;
   d_ += multivisit * d / n_;
   m_ += multivisit * m / n_;
 }
 
-void Node::FinalizeScoreUpdate(float v, float d, float m, int multivisit) {
+void Node::FinalizeScoreUpdate(float v, float d, float m, uint32_t multivisit) {
   // Recompute Q.
   wl_ += multivisit * (v - wl_) / (n_ + multivisit);
   d_ += multivisit * (d - d_) / (n_ + multivisit);
@@ -420,14 +424,16 @@ void Node::FinalizeScoreUpdate(float v, float d, float m, int multivisit) {
   n_in_flight_.fetch_sub(multivisit, std::memory_order_acq_rel);
 }
 
-void Node::AdjustForTerminal(float v, float d, float m, int multivisit) {
+void Node::AdjustForTerminal(float v, float d, float m, uint32_t multivisit) {
+  assert(static_cast<uint32_t>(multivisit) <= n_);
+
   // Recompute Q.
   wl_ += multivisit * v / n_;
   d_ += multivisit * d / n_;
   m_ += multivisit * m / n_;
 }
 
-void Node::IncrementNInFlight(int multivisit) {
+void Node::IncrementNInFlight(uint32_t multivisit) {
   n_in_flight_.fetch_add(multivisit, std::memory_order_acq_rel);
 }
 
