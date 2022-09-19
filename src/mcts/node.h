@@ -241,19 +241,19 @@ class Node {
   // Otherwise return false.
   bool TryStartScoreUpdate();
   // Decrements n-in-flight back.
-  void CancelScoreUpdate(int multivisit);
+  void CancelScoreUpdate(uint32_t multivisit);
   // Updates the node with newly computed value v.
   // Updates:
   // * Q (weighted average of all V in a subtree)
   // * N (+=multivisit)
   // * N-in-flight (-=multivisit)
-  void FinalizeScoreUpdate(float v, float d, float m, int multivisit);
+  void FinalizeScoreUpdate(float v, float d, float m, uint32_t multivisit);
   // Like FinalizeScoreUpdate, but it updates n existing visits by delta amount.
-  void AdjustForTerminal(float v, float d, float m, int multivisit);
+  void AdjustForTerminal(float v, float d, float m, uint32_t multivisit);
   // When search decides to treat one visit as several (in case of collisions
   // or visiting terminal nodes several times), it amplifies the visit by
   // incrementing n_in_flight.
-  void IncrementNInFlight(int multivisit);
+  void IncrementNInFlight(uint32_t multivisit);
 
   // Returns range for iterating over edges.
   ConstIterator Edges() const;
@@ -490,15 +490,15 @@ class LowNode {
   void SetBounds(GameResult lower, GameResult upper);
 
   // Decrements n-in-flight back.
-  void CancelScoreUpdate(int multivisit);
+  void CancelScoreUpdate(uint32_t multivisit);
   // Updates the node with newly computed value v.
   // Updates:
   // * Q (weighted average of all V in a subtree)
   // * N (+=multivisit)
   // * N-in-flight (-=multivisit)
-  void FinalizeScoreUpdate(float v, float d, float m, int multivisit);
+  void FinalizeScoreUpdate(float v, float d, float m, uint32_t multivisit);
   // Like FinalizeScoreUpdate, but it updates n existing visits by delta amount.
-  void AdjustForTerminal(float v, float d, float m, int multivisit);
+  void AdjustForTerminal(float v, float d, float m, uint32_t multivisit);
 
   // Deletes all children.
   void ReleaseChildren();
