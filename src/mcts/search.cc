@@ -163,6 +163,7 @@ Search::Search(NodeTree* dag, Network* network,
       searchmoves_(searchmoves),
       start_time_(start_time),
       initial_visits_(root_node_->GetN()),
+      initial_nodes_(dag->AllocatedNodeCount()),
       root_move_filter_(MakeRootMoveFilter(
           searchmoves_, syzygy_tb_, played_history_,
           params_.GetSyzygyFastPlay(), &tb_hits_, &root_is_in_dtz_)),
@@ -831,7 +832,7 @@ void Search::PopulateCommonIterationStats(IterationStats* stats) {
       nps_start_time_ = std::chrono::steady_clock::now();
     }
   }
-  stats->total_nodes = total_playouts_ + initial_visits_;
+  stats->total_nodes = total_playouts_ + initial_nodes_;
   stats->nodes_since_movestart = total_playouts_;
   stats->batches_since_movestart = total_batches_;
   stats->average_depth = cum_depth_ / (total_playouts_ ? total_playouts_ : 1);
