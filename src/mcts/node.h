@@ -549,12 +549,12 @@ class LowNode {
 #define STATIC_CHILDREN_ARRAY_SIZE 0
   constexpr static size_t kStaticChildrenArraySize = STATIC_CHILDREN_ARRAY_SIZE;
   // Number of dynamically allocated array for children/realized edges.
-  constexpr static size_t kDynamicChildrenArrayCount = 5;
+  constexpr static size_t kDynamicChildrenArrayCount = 4;
   // Sizes of dynamically allocated array for children/realized edges. All
   // arrays have fixed size, except the last one that holds the rest of
   // children/realized edges.
   constexpr static std::array<size_t, kDynamicChildrenArrayCount - 1>
-      kDynamicChildrenArraySizes = {1, 1, 2, 2};
+      kDynamicChildrenArraySizes = {1, 2, 4};
   // Starts of dynamically allocated array for children/realized edges.
   constexpr static std::array<size_t, kDynamicChildrenArrayCount>
       kDynamicChildrenArrayStarts = RunningSumsBefore(
