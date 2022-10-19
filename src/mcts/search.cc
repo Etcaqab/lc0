@@ -2175,9 +2175,16 @@ void SearchWorker::DoBackupUpdateSingleNode(
                             node_to_process.multivisit);
   }
 
-  if (!MaybeAdjustForTerminalOrTransposition(n, nl, v, d, m, n_to_fix, v_delta,
-                                             d_delta, m_delta,
-                                             update_parent_bounds)) {
+  if (nr >= 2) {
+    // Three-fold itself has to be handled as a terminal to produce relevant
+    // results. Unlike two-folds that can keep updating their "real" values.
+    n->SetRepetition();
+    v = 0.0f;
+    d = 1.0f;
+    m = 1;
+  } else if (!MaybeAdjustForTerminalOrTransposition(n, nl, v, d, m, n_to_fix,
+                                                    v_delta, d_delta, m_delta,
+                                                    update_parent_bounds)) {
     // If there is nothing better, use original NN values adjusted for node.
     v = -nl->GetWL();
     d = nl->GetD();
@@ -2189,19 +2196,19 @@ void SearchWorker::DoBackupUpdateSingleNode(
        /* ++it in the body */) {
     n->FinalizeScoreUpdate(v, d, m, node_to_process.multivisit);
     if (n_to_fix > 0 && !n->IsTerminal()) {
-      // Number of visits may decrease above transposition low node.
-      n_to_fix = std::min(n_to_fix, n->GetN());
       n->AdjustForTerminal(v_delta, d_delta, m_delta, n_to_fix);
     }
 
-    // Stop delta update on repetition "terminal" and propagate a draw above.
+    // Stop delta update on repetition "terminal" and propagate a draw above
+    // repetitions valid on the current path.
     // Only do this after edge update to have good values if play goes here.
-    if (nr > 0) {
-      n_to_fix = 0;
+    if (nr == 1 && !n->IsTerminal()) {
+      n->SetRepetition();
       v = 0.0f;
       d = 1.0f;
-      m = nm;
+      m = nm + 1;
     }
+    if (n->IsRepetition()) n_to_fix = 0;
 
     // Nothing left to do without ancestors to update.
     if (++it == path.crend()) break;
