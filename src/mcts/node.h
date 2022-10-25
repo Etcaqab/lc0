@@ -175,14 +175,16 @@ class Node {
   Node()
       : terminal_type_(Terminal::NonTerminal),
         lower_bound_(GameResult::BLACK_WON),
-        upper_bound_(GameResult::WHITE_WON) {}
+        upper_bound_(GameResult::WHITE_WON),
+        repetition_(false) {}
   // Takes own @edge and @index in the parent.
   Node(const Edge& edge, uint16_t index)
       : edge_(edge),
         index_(index),
         terminal_type_(Terminal::NonTerminal),
         lower_bound_(GameResult::BLACK_WON),
-        upper_bound_(GameResult::WHITE_WON) {}
+        upper_bound_(GameResult::WHITE_WON),
+        repetition_(false) {}
   ~Node() { UnsetLowNode(); }
 
   // Atomics prevent use of the default move constructor version.
@@ -303,10 +305,15 @@ class Node {
   // Index in parent's edges - useful for correlated ordering.
   uint16_t Index() const { return index_; }
 
+  void SetRepetition() { repetition_ = true; }
+  bool IsRepetition() const { return repetition_; }
+
   // Check if node was realized (not just constructed).
   bool Realized() const {
     return index_.load(std::memory_order_acquire) < kMagicIndexAssigned;
   }
+
+  bool WLDMInvariantsHold() const;
 
  private:
   // To minimize the number of padding bytes and to avoid having unnecessary
@@ -357,6 +364,8 @@ class Node {
   // Best and worst result for this node.
   GameResult lower_bound_ : 2;
   GameResult upper_bound_ : 2;
+  // Edge was handled as a repetition at some point.
+  bool repetition_ : 1;
 };
 
 // Check that Node still fits into an expected cache line size.
@@ -454,6 +463,8 @@ class LowNode {
     d_ = eval->d;
     m_ = eval->m;
 
+    assert(WLDMInvariantsHold());
+
     num_edges_ = eval->num_edges;
   }
 
@@ -543,6 +554,8 @@ class LowNode {
   // Return realized edge at specified index, creating it if necessary.
   // Initializes a new child if @init is true.
   Node* InsertChildAt(uint16_t index, bool init = true);
+
+  bool WLDMInvariantsHold() const;
 
  private:
   // How many children/realized edges are inlined here.
