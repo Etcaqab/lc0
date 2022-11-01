@@ -30,9 +30,10 @@
 #include "mcts/node.h"
 #include "neural/cache.h"
 
-#if defined(TCMALLOC) && __has_include(<gperftools/malloc_extension.h>)
+#if defined(USE_JEMALLOC_STATS)
+#include <jemalloc/jemalloc.h>
+#elif defined(USE_TCMALLOC_STATS)
 #include <gperftools/malloc_extension.h>
-#define TCMALLOC_EXT
 #endif
 
 namespace lczero {
@@ -107,8 +108,11 @@ const size_t kAvgCacheItemSize =
 
 MemoryWatchingStopper::MemoryWatchingStopper(int cache_size, int ram_limit_mb,
                                              bool populate_remaining_playouts)
-    : ram_limit_mb_(ram_limit_mb),
+    :
+#if defined(USE_MALLOC_STATS)
+      ram_limit_mb_(ram_limit_mb),
       populate_remaining_playouts_(populate_remaining_playouts),
+#endif
       visits_stopper_(
           (ram_limit_mb * 1000000LL - cache_size * kAvgCacheItemSize) /
               kAvgNodeSize,
@@ -119,26 +123,50 @@ MemoryWatchingStopper::MemoryWatchingStopper(int cache_size, int ram_limit_mb,
           << visits_stopper_.GetVisitsLimit() << " nodes.";
 }
 
+#if defined(USE_MALLOC_STATS)
+bool MemoryWatchingStopper::MaybeGetAllocatedBytes(size_t* bytes) {
+#if defined(USE_JEMALLOC_STATS)
+  uint64_t epoch;
+  size_t size = sizeof(*bytes);
+  if (mallctl("epoch", NULL, NULL, (void*)&epoch, sizeof(epoch)) == 0 &&
+      mallctl("stats.allocated", (void*)bytes, &size, NULL, 0) == 0) {
+    return true;
+  }
+#elif defined(USE_TCMALLOC_STATS)
+  uint64_t current_allocated_bytes;
+  if (MallocExtension::instance()->GetNumericProperty(
+          "generic.current_allocated_bytes", &current_allocated_bytes)) {
+    *bytes = current_allocated_bytes;
+    return true;
+  }
+#endif
+
+  *bytes = 0;
+  return false;
+}
+#endif
+
 bool MemoryWatchingStopper::ShouldStop(const IterationStats& stats,
                                        StoppersHints* hints) {
-#if defined TCMALLOC_EXT
-  uint64_t used;
-  if (ram_limit_mb_ > 0 &&
-      MallocExtension::instance()->GetNumericProperty(
-          "generic.current_allocated_bytes", &used)) {
+#if defined(USE_MALLOC_STATS)
+  size_t allocated_bytes;
+  if (ram_limit_mb_ > 0 && MaybeGetAllocatedBytes(&allocated_bytes)) {
     if (populate_remaining_playouts_) {
       hints->UpdateEstimatedRemainingPlayouts(
-          (ram_limit_mb_ * 1000000ULL - used) / kAvgNodeSize);
+          (ram_limit_mb_ * 1000000ULL - allocated_bytes) / kAvgNodeSize);
     }
-    if (used >= ram_limit_mb_ * 1000000ULL) {
-      LOGFILE << "Stopped search: Allocated: " << used
+
+    if (allocated_bytes >= ram_limit_mb_ * 1000000ULL) {
+      LOGFILE << "Stopped search: Allocated: " << allocated_bytes
               << ">=" << ram_limit_mb_ * 1000000ULL;
       return true;
+    } else {
+      return false;
     }
-  } else
+  }
 #endif
-    return visits_stopper_.ShouldStop(stats, hints);
-  return false;
+
+  return visits_stopper_.ShouldStop(stats, hints);
 }
 
 ///////////////////////////

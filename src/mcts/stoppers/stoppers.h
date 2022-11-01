@@ -33,6 +33,14 @@
 #include "mcts/node.h"
 #include "mcts/stoppers/timemgr.h"
 
+#if defined(JEMALLOC)
+#define USE_MALLOC_STATS
+#define USE_JEMALLOC_STATS
+#elif defined(TCMALLOC) && __has_include(<gperftools/malloc_extension.h>)
+#define USE_MALLOC_STATS
+#define USE_TCMALLOC_STATS
+#endif
+
 namespace lczero {
 
 // Combines multiple stoppers into one.
@@ -78,9 +86,8 @@ class PlayoutsStopper : public SearchStopper {
   const bool populate_remaining_playouts_;
 };
 
-// Computes tree size which may fit into the memory and limits by that tree
-// size.
-
+// Watches memory consumption either directly via malloc library statistics or
+// indirectly via graph and cache size estimation.
 class MemoryWatchingStopper : public SearchStopper {
  public:
   // Must be in sync with description at kRamLimitMbId.
@@ -90,8 +97,15 @@ class MemoryWatchingStopper : public SearchStopper {
   bool ShouldStop(const IterationStats&, StoppersHints*) override;
 
  private:
+#if defined(USE_MALLOC_STATS)
+  // Try to get @allocated_bytes from malloc statistics and return true on
+  // success.
+  bool MaybeGetAllocatedBytes(size_t* allocated_bytes);
+
   const int64_t ram_limit_mb_;
   const bool populate_remaining_playouts_;
+#endif
+
   VisitsStopper visits_stopper_;
 };
 

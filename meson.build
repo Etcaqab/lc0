@@ -129,7 +129,10 @@ conf_data.set_quoted('BUILD_IDENTIFIER', build_identifier)
 configure_file(output: 'build_id.h', configuration: conf_data)
 
 # Some malloc libraries require to be linked first.
-if get_option('malloc') == 'mimalloc' and cc.get_id() == 'msvc'
+if get_option('malloc') == 'jemalloc'
+  deps += cc.find_library('jemalloc', required: true)
+  add_project_arguments('-DJEMALLOC', language : 'cpp')
+elif get_option('malloc') == 'mimalloc' and cc.get_id() == 'msvc'
   if get_option('b_vscrt') != 'md' and get_option('b_vscrt') != 'mdd'
     error('You need -Db_vscrt=md (or mdd)')
   endif
