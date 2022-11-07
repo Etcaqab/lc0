@@ -791,8 +791,6 @@ std::pair<LowNode*, bool> NodeTree::TTGetOrCreate(uint64_t hash) {
   return {tt_iter->second.get(), is_tt_miss};
 }
 
-void NodeTree::TTMaintenance() { TTGCSome(0); }
-
 void NodeTree::TTClear() {
   // Make sure destructors don't fail.
   absl::c_for_each(

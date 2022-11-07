@@ -973,11 +973,6 @@ Search::~Search() {
     assert(root_node_->ZeroNInFlight());
 #endif
   }
-
-  // Free previously released nodes that were not reused during this search.
-  dag_->TTMaintenance();
-  dag_->TTMaintenance();
-
   LOGFILE << "Search destroyed.";
 }
 
@@ -1966,6 +1961,7 @@ void SearchWorker::FetchSingleNodeResult(NodeToProcess* node_to_process,
 void SearchWorker::DoBackupUpdate() {
   // Nodes mutex for doing node updates.
   SharedMutex::Lock lock(search_->nodes_mutex_);
+  search_->dag_->TTGCSome(minibatch_.size());
 
   bool work_done = number_out_of_order_ > 0;
   for (const NodeToProcess& node_to_process : minibatch_) {

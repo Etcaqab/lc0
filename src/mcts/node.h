@@ -948,8 +948,6 @@ class NodeTree {
   // new low node and insert it into the Transposition Table if it is not there
   // already. Return the low node for the hash.
   std::pair<LowNode*, bool> TTGetOrCreate(uint64_t hash);
-  // Evict unused low nodes from the Transposition Table.
-  void TTMaintenance();
   // Clear the Transposition Table.
   // NOTE: Safe only when non-TT nodes were already detached.
   void TTClear();
