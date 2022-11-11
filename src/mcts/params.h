@@ -82,7 +82,6 @@ class SearchParams {
   float GetPolicySoftmaxTemp() const { return kPolicySoftmaxTemp; }
   int GetMaxCollisionEvents() const { return kMaxCollisionEvents; }
   int GetMaxCollisionVisits() const { return kMaxCollisionVisits; }
-  bool GetOutOfOrderEval() const { return kOutOfOrderEval; }
   bool GetStickyEndgames() const { return kStickyEndgames; }
   bool GetSyzygyFastPlay() const { return kSyzygyFastPlay; }
   int GetMultiPv() const { return options_.Get<int>(kMultiPvId); }
@@ -105,7 +104,6 @@ class SearchParams {
   float GetOpponentDrawScore() const { return kDrawScoreOpponent; }
   float GetWhiteDrawDelta() const { return kDrawScoreWhite; }
   float GetBlackDrawDelta() const { return kDrawScoreBlack; }
-  uint32_t GetMaxOutOfOrderEvals() const { return kMaxOutOfOrderEvals; }
   float GetNpsLimit() const { return kNpsLimit; }
 
   int GetTaskWorkersPerSearchWorker() const {
@@ -164,7 +162,6 @@ class SearchParams {
   static const OptionId kPolicySoftmaxTempId;
   static const OptionId kMaxCollisionEventsId;
   static const OptionId kMaxCollisionVisitsId;
-  static const OptionId kOutOfOrderEvalId;
   static const OptionId kStickyEndgamesId;
   static const OptionId kSyzygyFastPlayId;
   static const OptionId kMultiPvId;
@@ -183,7 +180,6 @@ class SearchParams {
   static const OptionId kDrawScoreOpponentId;
   static const OptionId kDrawScoreWhiteId;
   static const OptionId kDrawScoreBlackId;
-  static const OptionId kMaxOutOfOrderEvalsId;
   static const OptionId kNpsLimitId;
   static const OptionId kTaskWorkersPerSearchWorkerId;
   static const OptionId kMinimumWorkSizeForProcessingId;
@@ -221,7 +217,6 @@ class SearchParams {
   const float kPolicySoftmaxTemp;
   const int kMaxCollisionEvents;
   const int kMaxCollisionVisits;
-  const bool kOutOfOrderEval;
   const bool kStickyEndgames;
   const bool kSyzygyFastPlay;
   const FillEmptyHistory kHistoryFill;
@@ -238,7 +233,6 @@ class SearchParams {
   const float kDrawScoreOpponent;
   const float kDrawScoreWhite;
   const float kDrawScoreBlack;
-  const int kMaxOutOfOrderEvals;
   const float kNpsLimit;
   const int kTaskWorkersPerSearchWorker;
   const int kMinimumWorkSizeForProcessing;

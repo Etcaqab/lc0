@@ -1173,16 +1173,10 @@ void SearchWorker::GatherMinibatch() {
   uint32_t collisions_left = CalculateCollisionsLeft(
       std::min(static_cast<int64_t>(cur_n), remaining_n), params_);
 
-  // Number of nodes processed out of order.
-  number_out_of_order_ = 0;
-
   int thread_count = search_->thread_count_.load(std::memory_order_acquire);
 
   // Gather nodes to process in the current batch.
-  // If we had too many nodes out of order, also interrupt the iteration so
-  // that search can exit.
-  while (minibatch_size < params_.GetMiniBatchSize() &&
-         number_out_of_order_ < params_.GetMaxOutOfOrderEvals()) {
+  while (minibatch_size < params_.GetMiniBatchSize()) {
     // If there's something to process without touching slow neural net, do it.
     if (minibatch_size > 0 && computation_->GetCacheMisses() == 0) return;
 
@@ -1202,9 +1196,8 @@ void SearchWorker::GatherMinibatch() {
 
     int new_start = static_cast<int>(minibatch_.size());
 
-    PickNodesToExtend(
-        std::min({collisions_left, params_.GetMiniBatchSize() - minibatch_size,
-                  params_.GetMaxOutOfOrderEvals() - number_out_of_order_}));
+    PickNodesToExtend(std::min(
+        {collisions_left, params_.GetMiniBatchSize() - minibatch_size}));
 
     // Count the non-collisions.
     int non_collisions = 0;
@@ -1257,40 +1250,8 @@ void SearchWorker::GatherMinibatch() {
         WaitForTasks();
       }
     }
-    bool some_ooo = false;
-    for (int i = static_cast<int>(minibatch_.size()) - 1; i >= new_start; i--) {
-      if (minibatch_[i].ooo_completed) {
-        some_ooo = true;
-        break;
-      }
-    }
-    if (some_ooo) {
-      SharedMutex::Lock lock(search_->nodes_mutex_);
-      for (int i = static_cast<int>(minibatch_.size()) - 1; i >= new_start;
-           i--) {
-        // If there was any OOO, revert 'all' new collisions - it isn't possible
-        // to identify exactly which ones are afterwards and only prune those.
-        // This may remove too many items, but hopefully most of the time they
-        // will just be added back in the same in the next gather.
-        if (minibatch_[i].IsCollision()) {
-          for (auto it = ++(minibatch_[i].path.crbegin());
-               it != minibatch_[i].path.crend(); ++it) {
-            std::get<0>(*it)->CancelScoreUpdate(minibatch_[i].multivisit);
-          }
-          minibatch_.erase(minibatch_.begin() + i);
-        } else if (minibatch_[i].ooo_completed) {
-          FetchSingleNodeResult(&minibatch_[i], minibatch_[i], 0);
-          DoBackupUpdateSingleNode(minibatch_[i]);
-          minibatch_.erase(minibatch_.begin() + i);
-          --minibatch_size;
-          ++number_out_of_order_;
-        }
-      }
-    }
+
     for (size_t i = new_start; i < minibatch_.size(); i++) {
-      // If there was no OOO, there can stil be collisions.
-      // There are no OOO though.
-      // Also terminals when OOO is disabled.
       if (!minibatch_[i].ShouldAddToInput()) continue;
       if (minibatch_[i].is_cache_hit) {
         // Since minibatch_[i] holds cache lock, this is guaranteed to succeed.
@@ -1336,9 +1297,6 @@ void SearchWorker::ProcessPickedTask(int start_idx, int end_idx) {
       // Node was never visited, extend it.
       ExtendNode(picked_node);
     }
-
-    picked_node.ooo_completed =
-        params_.GetOutOfOrderEval() && picked_node.CanEvalOutOfOrder();
   }
 }
 
@@ -1959,7 +1917,7 @@ void SearchWorker::DoBackupUpdate() {
   // Nodes mutex for doing node updates.
   SharedMutex::Lock lock(search_->nodes_mutex_);
 
-  bool work_done = number_out_of_order_ > 0;
+  bool work_done = false;
   for (const NodeToProcess& node_to_process : minibatch_) {
     DoBackupUpdateSingleNode(node_to_process);
     if (!node_to_process.IsCollision()) {
@@ -2233,13 +2191,11 @@ void SearchWorker::UpdateCounters() {
   // If this thread had no work, not even out of order, then sleep for some
   // milliseconds. Collisions don't count as work, so have to enumerate to find
   // out if there was anything done.
-  bool work_done = number_out_of_order_ > 0;
-  if (!work_done) {
-    for (NodeToProcess& node_to_process : minibatch_) {
-      if (!node_to_process.IsCollision()) {
-        work_done = true;
-        break;
-      }
+  bool work_done = false;  // TODO: Why not precomputed?
+  for (NodeToProcess& node_to_process : minibatch_) {
+    if (!node_to_process.IsCollision()) {
+      work_done = true;
+      break;
     }
   }
   if (!work_done) {

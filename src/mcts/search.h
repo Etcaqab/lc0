@@ -298,10 +298,6 @@ class SearchWorker {
       return !is_collision && !node->IsTerminal() && !node->GetLowNode();
     }
     bool IsCollision() const { return is_collision; }
-    bool CanEvalOutOfOrder() const {
-      return is_tt_hit || is_cache_hit || node->IsTerminal() ||
-             node->GetLowNode();
-    }
     bool ShouldAddToInput() const { return nn_queried && !is_tt_hit; }
 
     // The path to the node to extend.
@@ -323,7 +319,6 @@ class SearchWorker {
     LowNode* tt_low_node;
     NNCacheLock lock;
     PositionHistory history;
-    bool ooo_completed = false;
 
     // Repetition draws.
     int repetitions = 0;
@@ -347,8 +342,8 @@ class SearchWorker {
           << " Node:" << node << " Multivisit:" << multivisit
           << " Maxvisit:" << maxvisit << " NNQueried:" << nn_queried
           << " TTHit:" << is_tt_hit << " CacheHit:" << is_cache_hit
-          << " Collision:" << is_collision << " OOO:" << ooo_completed
-          << " Repetitions:" << repetitions << " Path:";
+          << " Collision:" << is_collision << " Repetitions:" << repetitions
+          << " Path:";
       for (auto it = path.cbegin(); it != path.cend(); ++it) {
         if (it != path.cbegin()) oss << "->";
         auto n = std::get<0>(*it);
@@ -472,7 +467,6 @@ class SearchWorker {
   std::unique_ptr<CachingComputation> computation_;
   // History is reset and extended by PickNodeToExtend().
   PositionHistory history_;
-  uint32_t number_out_of_order_ = 0;
   const SearchParams& params_;
   std::unique_ptr<Node> precached_node_;
   const bool moves_left_support_;

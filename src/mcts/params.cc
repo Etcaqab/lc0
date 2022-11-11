@@ -178,16 +178,6 @@ const OptionId SearchParams::kMaxCollisionVisitsId{
 const OptionId SearchParams::kMaxCollisionEventsId{
     "max-collision-events", "MaxCollisionEvents",
     "Allowed node collision events, per batch."};
-const OptionId SearchParams::kOutOfOrderEvalId{
-    "out-of-order-eval", "OutOfOrderEval",
-    "During the gathering of a batch for NN to eval, if position happens to be "
-    "in the cache or is terminal, evaluate it right away without sending the "
-    "batch to the NN. When off, this may only happen with the very first node "
-    "of a batch; when on, this can happen with any node."};
-const OptionId SearchParams::kMaxOutOfOrderEvalsId{
-    "max-out-of-order-evals-factor", "MaxOutOfOrderEvalsFactor",
-    "Maximum number of out of order evals during gathering of a batch is "
-    "calculated by multiplying the maximum batch size by this number."};
 const OptionId SearchParams::kStickyEndgamesId{
     "sticky-endgames", "StickyEndgames",
     "When an end of game position is found during search, allow the eval of "
@@ -344,8 +334,6 @@ void SearchParams::Populate(OptionsParser* options) {
       145000;
   options->Add<FloatOption>(kMaxCollisionVisitsScalingPowerId, 0.01, 100) =
       1.25;
-  options->Add<BoolOption>(kOutOfOrderEvalId) = true;
-  options->Add<FloatOption>(kMaxOutOfOrderEvalsId, 0.0f, 100.0f) = 2.4f;
   options->Add<BoolOption>(kStickyEndgamesId) = true;
   options->Add<BoolOption>(kSyzygyFastPlayId) = false;
   options->Add<IntOption>(kMultiPvId, 1, 500) = 1;
@@ -433,7 +421,6 @@ SearchParams::SearchParams(const OptionsDict& options)
       kPolicySoftmaxTemp(options.Get<float>(kPolicySoftmaxTempId)),
       kMaxCollisionEvents(options.Get<int>(kMaxCollisionEventsId)),
       kMaxCollisionVisits(options.Get<int>(kMaxCollisionVisitsId)),
-      kOutOfOrderEval(options.Get<bool>(kOutOfOrderEvalId)),
       kStickyEndgames(options.Get<bool>(kStickyEndgamesId)),
       kSyzygyFastPlay(options.Get<bool>(kSyzygyFastPlayId)),
       kHistoryFill(EncodeHistoryFill(options.Get<std::string>(kHistoryFillId))),
@@ -451,9 +438,6 @@ SearchParams::SearchParams(const OptionsDict& options)
       kDrawScoreOpponent{options.Get<int>(kDrawScoreOpponentId) / 100.0f},
       kDrawScoreWhite{options.Get<int>(kDrawScoreWhiteId) / 100.0f},
       kDrawScoreBlack{options.Get<int>(kDrawScoreBlackId) / 100.0f},
-      kMaxOutOfOrderEvals(std::max(
-          1, static_cast<int>(options.Get<float>(kMaxOutOfOrderEvalsId) *
-                              options.Get<int>(kMiniBatchSizeId)))),
       kNpsLimit(options.Get<float>(kNpsLimitId)),
       kTaskWorkersPerSearchWorker(
           options.Get<int>(kTaskWorkersPerSearchWorkerId)),
