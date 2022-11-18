@@ -128,7 +128,7 @@ void PopulateCommonUciStoppers(ChainedSearchStopper* stopper,
       stopper->AddStopper(std::make_unique<PlayoutsStopper>(
           *params.nodes, options.Get<float>(kSmartPruningFactorId) > 0.0f));
     } else {
-        node_limit = *params.nodes;
+      node_limit = *params.nodes;
     }
   }
 
