@@ -30,9 +30,11 @@
 #include "mcts/node.h"
 #include "neural/cache.h"
 
-#if defined(USE_JEMALLOC_STATS)
+#if defined(USE_MALLOC_STATS_GNU)
+#include <malloc.h>
+#elif defined(USE_MALLOC_STATS_JE)
 #include <jemalloc/jemalloc.h>
-#elif defined(USE_TCMALLOC_STATS)
+#elif defined(USE_MALLOC_STATS_TC)
 #include <gperftools/malloc_extension.h>
 #endif
 
@@ -125,14 +127,18 @@ MemoryWatchingStopper::MemoryWatchingStopper(int cache_size, int ram_limit_mb,
 
 #if defined(USE_MALLOC_STATS)
 bool MemoryWatchingStopper::MaybeGetAllocatedBytes(size_t* bytes) {
-#if defined(USE_JEMALLOC_STATS)
+#if defined(USE_MALLOC_STATS_GNU)
+  auto info = mallinfo2();
+  *bytes = info.uordblks;
+  return true;
+#elif defined(USE_MALLOC_STATS_JE)
   uint64_t epoch;
   size_t size = sizeof(*bytes);
   if (mallctl("epoch", NULL, NULL, (void*)&epoch, sizeof(epoch)) == 0 &&
       mallctl("stats.allocated", (void*)bytes, &size, NULL, 0) == 0) {
     return true;
   }
-#elif defined(USE_TCMALLOC_STATS)
+#elif defined(USE_MALLOC_STATS_TC)
   uint64_t current_allocated_bytes;
   if (MallocExtension::instance()->GetNumericProperty(
           "generic.current_allocated_bytes", &current_allocated_bytes)) {

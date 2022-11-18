@@ -33,12 +33,21 @@
 #include "mcts/node.h"
 #include "mcts/stoppers/timemgr.h"
 
-#if defined(JEMALLOC)
+#if defined(MALLOC_IS_jemalloc)
 #define USE_MALLOC_STATS
-#define USE_JEMALLOC_STATS
-#elif defined(TCMALLOC) && __has_include(<gperftools/malloc_extension.h>)
+#define USE_MALLOC_STATS_JE
+#elif defined(MALLOC_IS_tcmalloc) && __has_include(<gperftools/malloc_extension.h>)
 #define USE_MALLOC_STATS
-#define USE_TCMALLOC_STATS
+#define USE_MALLOC_STATS_TC
+#elif defined(MALLOC_IS_)
+// Use libc malloc extensions if possible.
+
+#if defined(__GLIBC__) && \
+    (__GLIBC__ > 2 || (__GLIBC__ == 2 && __GLIBC_MINOR__ >= 33))
+#define USE_MALLOC_STATS
+#define USE_MALLOC_STATS_GNU
+#endif
+
 #endif
 
 namespace lczero {
