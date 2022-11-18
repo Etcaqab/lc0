@@ -121,8 +121,13 @@ MemoryWatchingStopper::MemoryWatchingStopper(int cache_size, int ram_limit_mb,
           populate_remaining_playouts) {
   LOGFILE << "RAM limit " << ram_limit_mb << "MB. Cache takes "
           << cache_size * kAvgCacheItemSize / 1000000
-          << "MB. Remaining memory is enough for "
+          << "MB. Remaining memory is enough for approximately "
           << visits_stopper_.GetVisitsLimit() << " nodes.";
+
+#if !defined(USE_MALLOC_STATS)
+  LOGFILE << "WARNING: RAM limit is set but no allocation statistics are "
+             "available to make its enforcement reliable.";
+#endif
 }
 
 #if defined(USE_MALLOC_STATS)
