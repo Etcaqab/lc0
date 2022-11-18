@@ -71,7 +71,7 @@ bool VisitsStopper::ShouldStop(const IterationStats& stats,
   }
   if (stats.total_nodes >= nodes_limit_) {
     LOGFILE << "Stopped search: Reached visits limit: " << stats.total_nodes
-            << ">=" << nodes_limit_;
+            << " >= " << nodes_limit_;
     return true;
   }
   return false;
@@ -89,7 +89,7 @@ bool PlayoutsStopper::ShouldStop(const IterationStats& stats,
   }
   if (stats.nodes_since_movestart >= nodes_limit_) {
     LOGFILE << "Stopped search: Reached playouts limit: "
-            << stats.nodes_since_movestart << ">=" << nodes_limit_;
+            << stats.nodes_since_movestart << " >= " << nodes_limit_;
     return true;
   }
   return false;
@@ -115,10 +115,10 @@ MemoryWatchingStopper::MemoryWatchingStopper(int cache_size, int ram_limit_mb,
       ram_limit_mb_(ram_limit_mb),
       populate_remaining_playouts_(populate_remaining_playouts),
 #endif
-      visits_stopper_(
-          (ram_limit_mb * 1000000LL - cache_size * kAvgCacheItemSize) /
-              kAvgNodeSize,
-          populate_remaining_playouts) {
+      visits_stopper_(std::max<int64_t>(0, (ram_limit_mb * 1000000LL -
+                                            cache_size * kAvgCacheItemSize)) /
+                          kAvgNodeSize,
+                      populate_remaining_playouts) {
   LOGFILE << "RAM limit " << ram_limit_mb << "MB. Cache takes "
           << cache_size * kAvgCacheItemSize / 1000000
           << "MB. Remaining memory is enough for approximately "
@@ -169,7 +169,7 @@ bool MemoryWatchingStopper::ShouldStop(const IterationStats& stats,
 
     if (allocated_bytes >= ram_limit_mb_ * 1000000ULL) {
       LOGFILE << "Stopped search: Allocated: " << allocated_bytes
-              << ">=" << ram_limit_mb_ * 1000000ULL;
+              << " >= " << ram_limit_mb_ * 1000000ULL;
       return true;
     } else {
       return false;

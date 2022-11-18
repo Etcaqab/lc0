@@ -70,8 +70,15 @@ class ChainedSearchStopper : public SearchStopper {
 // Watches visits (total tree nodes) and predicts remaining visits.
 class VisitsStopper : public SearchStopper {
  public:
+  static constexpr int64_t default_limit = 4000000000ll;
+
+  // Create a visit stopper with the limit set to default limit.
+  VisitsStopper(bool populate_remaining_playouts)
+      : nodes_limit_(default_limit),
+        populate_remaining_playouts_(populate_remaining_playouts) {}
+  // Create a visit stopper with the specified @limit.
   VisitsStopper(int64_t limit, bool populate_remaining_playouts)
-      : nodes_limit_(limit ? limit : 4000000000ll),
+      : nodes_limit_(limit),
         populate_remaining_playouts_(populate_remaining_playouts) {}
   int64_t GetVisitsLimit() const { return nodes_limit_; }
   bool ShouldStop(const IterationStats&, StoppersHints*) override;
