@@ -100,6 +100,7 @@ bool PlayoutsStopper::ShouldStop(const IterationStats& stats,
 ///////////////////////////
 
 namespace {
+constexpr size_t kMega = 1000000ULL;
 const size_t kAvgNodeSize =
     sizeof(Node) + MemoryWatchingStopper::kAvgMovesPerPosition * sizeof(Edge);
 const size_t kAvgCacheItemSize =
@@ -115,12 +116,12 @@ MemoryWatchingStopper::MemoryWatchingStopper(int cache_size, int ram_limit_mb,
       ram_limit_mb_(ram_limit_mb),
       populate_remaining_playouts_(populate_remaining_playouts),
 #endif
-      visits_stopper_(std::max<int64_t>(0, (ram_limit_mb * 1000000LL -
+      visits_stopper_(std::max<int64_t>(0, (ram_limit_mb * kMega -
                                             cache_size * kAvgCacheItemSize)) /
                           kAvgNodeSize,
                       populate_remaining_playouts) {
   LOGFILE << "RAM limit " << ram_limit_mb << "MB. Cache takes "
-          << cache_size * kAvgCacheItemSize / 1000000
+          << cache_size * kAvgCacheItemSize / kMega
           << "MB. Remaining memory is enough for approximately "
           << visits_stopper_.GetVisitsLimit() << " nodes.";
 
@@ -164,12 +165,12 @@ bool MemoryWatchingStopper::ShouldStop(const IterationStats& stats,
   if (ram_limit_mb_ > 0 && MaybeGetAllocatedBytes(&allocated_bytes)) {
     if (populate_remaining_playouts_) {
       hints->UpdateEstimatedRemainingPlayouts(
-          (ram_limit_mb_ * 1000000ULL - allocated_bytes) / kAvgNodeSize);
+          (ram_limit_mb_ * kMega - allocated_bytes) / kAvgNodeSize);
     }
 
-    if (allocated_bytes >= ram_limit_mb_ * 1000000ULL) {
+    if (allocated_bytes >= ram_limit_mb_ * kMega) {
       LOGFILE << "Stopped search: Allocated: " << allocated_bytes
-              << " >= " << ram_limit_mb_ * 1000000ULL;
+              << " >= " << ram_limit_mb_ * kMega;
       return true;
     } else {
       return false;
