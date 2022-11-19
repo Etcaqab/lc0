@@ -120,6 +120,13 @@ class MemoryWatchingStopper : public SearchStopper {
 
   const int64_t ram_limit_mb_;
   const bool populate_remaining_playouts_;
+
+#if defined(USE_MALLOC_STATS_JE)
+  static constexpr size_t epoch_miblen = 1;
+  static constexpr size_t stats_allocated_miblen = 2;
+  size_t epoch_mib[1];
+  size_t stats_allocated_mib[stats_allocated_miblen];
+#endif
 #endif
 
   VisitsStopper visits_stopper_;

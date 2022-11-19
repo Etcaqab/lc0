@@ -129,6 +129,14 @@ MemoryWatchingStopper::MemoryWatchingStopper(int cache_size, int ram_limit_mb,
   LOGFILE << "WARNING: RAM limit is set but no allocation statistics are "
              "available to make its enforcement reliable.";
 #endif
+
+#if defined(USE_MALLOC_STATS_JE)
+  size_t miblen;
+  miblen = epoch_miblen;
+  mallctlnametomib("epoch", epoch_mib, &miblen);
+  miblen = stats_allocated_miblen;
+  mallctlnametomib("stats.allocated", stats_allocated_mib, &miblen);
+#endif
 }
 
 #if defined(USE_MALLOC_STATS)
@@ -140,8 +148,10 @@ bool MemoryWatchingStopper::MaybeGetAllocatedBytes(size_t* bytes) {
 #elif defined(USE_MALLOC_STATS_JE)
   uint64_t epoch;
   size_t size = sizeof(*bytes);
-  if (mallctl("epoch", NULL, NULL, (void*)&epoch, sizeof(epoch)) == 0 &&
-      mallctl("stats.allocated", (void*)bytes, &size, NULL, 0) == 0) {
+  if (mallctlbymib(epoch_mib, epoch_miblen, NULL, NULL, (void*)&epoch,
+                   sizeof(epoch)) == 0 &&
+      mallctlbymib(stats_allocated_mib, stats_allocated_miblen, (void*)bytes,
+                   &size, NULL, 0) == 0) {
     return true;
   }
 #elif defined(USE_MALLOC_STATS_TC)
