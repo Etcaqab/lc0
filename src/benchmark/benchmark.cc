@@ -52,6 +52,7 @@ void Benchmark::Run() {
   NetworkFactory::PopulateOptions(&options);
   options.Add<IntOption>(kThreadsOptionId, 1, 128) = kDefaultThreads;
   options.Add<IntOption>(kNNCacheSizeId, 0, 999999999) = 200000;
+  options.Add<IntOption>(kRamLimitMbId, 0, 100000000) = 0;
   SearchParams::Populate(&options);
 
   options.Add<IntOption>(kNodesId, -1, 999999999) = -1;
@@ -70,6 +71,8 @@ void Benchmark::Run() {
     const int movetime = option_dict.Get<int>(kMovetimeId);
     const std::string fen = option_dict.Get<std::string>(kFenId);
     int num_positions = option_dict.Get<int>(kNumPositionsId);
+    const auto cache_size_mb = option_dict.Get<int>(kNNCacheSizeId);
+    const auto ram_limit = option_dict.Get<int>(kRamLimitMbId);
 
     std::vector<std::double_t> times;
     std::vector<std::int64_t> playouts;
@@ -94,8 +97,14 @@ void Benchmark::Run() {
         stopper->AddStopper(std::make_unique<VisitsStopper>(visits, false));
       }
 
+      // RAM limit watching stopper.
+      if (ram_limit) {
+        stopper->AddStopper(std::make_unique<MemoryWatchingStopper>(
+            cache_size_mb, ram_limit, false));
+      }
+
       NNCache cache;
-      cache.SetCapacity(option_dict.Get<int>(kNNCacheSizeId));
+      cache.SetCapacity(cache_size_mb);
 
       NodeTree tree;
       tree.ResetToPosition(position, {});

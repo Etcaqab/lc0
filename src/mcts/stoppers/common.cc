@@ -34,8 +34,6 @@ const OptionId kNNCacheSizeId{
     "Number of positions to store in a memory cache. A large cache can speed "
     "up searching, but takes memory."};
 
-namespace {
-
 const OptionId kRamLimitMbId{
     "ramlimit-mb", "RamLimitMb",
     "Maximum memory usage for the engine, in megabytes. The estimation is very "
@@ -43,6 +41,9 @@ const OptionId kRamLimitMbId{
     "terminal node counted several times, and the estimation assumes that all "
     "positions have 30 possible moves. When set to 0, no RAM limit is "
     "enforced."};
+
+namespace {
+
 const OptionId kMinimumKLDGainPerNodeId{
     "minimum-kldgain-per-node", "MinimumKLDGainPerNode",
     "If greater than 0 search will abort unless the last "
