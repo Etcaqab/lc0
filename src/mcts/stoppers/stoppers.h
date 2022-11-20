@@ -122,10 +122,11 @@ class MemoryWatchingStopper : public SearchStopper {
   const bool populate_remaining_playouts_;
 
 #if defined(USE_MALLOC_STATS_JE)
-  static constexpr size_t epoch_miblen = 1;
-  static constexpr size_t stats_allocated_miblen = 2;
-  size_t epoch_mib[1];
-  size_t stats_allocated_mib[stats_allocated_miblen];
+  static constexpr size_t kEpochMibLen = 1;
+  static constexpr size_t kStatsAllocatedMibLen = 2;
+  size_t epoch_;
+  size_t epoch_mib_[kEpochMibLen];
+  size_t stats_allocated_mib_[kStatsAllocatedMibLen];
 #endif
 #endif
 

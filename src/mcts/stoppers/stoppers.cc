@@ -132,10 +132,10 @@ MemoryWatchingStopper::MemoryWatchingStopper(int cache_size, int ram_limit_mb,
 
 #if defined(USE_MALLOC_STATS_JE)
   size_t miblen;
-  miblen = epoch_miblen;
-  mallctlnametomib("epoch", epoch_mib, &miblen);
-  miblen = stats_allocated_miblen;
-  mallctlnametomib("stats.allocated", stats_allocated_mib, &miblen);
+  miblen = kEpochMibLen;
+  mallctlnametomib("epoch", epoch_mib_, &miblen);
+  miblen = kStatsAllocatedMibLen;
+  mallctlnametomib("stats.allocated", stats_allocated_mib_, &miblen);
 #endif
 }
 
@@ -146,12 +146,12 @@ bool MemoryWatchingStopper::MaybeGetAllocatedBytes(size_t* bytes) {
   *bytes = info.uordblks;
   return true;
 #elif defined(USE_MALLOC_STATS_JE)
-  uint64_t epoch;
-  size_t size = sizeof(*bytes);
-  if (mallctlbymib(epoch_mib, epoch_miblen, NULL, NULL, (void*)&epoch,
-                   sizeof(epoch)) == 0 &&
-      mallctlbymib(stats_allocated_mib, stats_allocated_miblen, (void*)bytes,
-                   &size, NULL, 0) == 0) {
+  size_t epoch_size = sizeof(epoch_);
+  size_t bytes_size = sizeof(*bytes);
+  if (mallctlbymib(epoch_mib_, kEpochMibLen, &epoch_, &epoch_size, &epoch_,
+                   epoch_size) == 0 &&
+      mallctlbymib(stats_allocated_mib_, kStatsAllocatedMibLen, bytes,
+                   &bytes_size, NULL, 0) == 0) {
     return true;
   }
 #elif defined(USE_MALLOC_STATS_TC)
