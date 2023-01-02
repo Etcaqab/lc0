@@ -822,10 +822,10 @@ void NodeTree::NonTTMaintenance() {
 bool NodeTree::TTGCSome(size_t count) {
   if (gc_queue_.empty()) return false;
 
-  for (auto n = count > 0 ? std::max(count, gc_queue_.size())
+  for (auto n = count > 0 ? std::min(count, gc_queue_.size())
                           : gc_queue_.size();
        n > 0; --n) {
-    auto& hash = gc_queue_.front();
+    auto hash = gc_queue_.front();
     gc_queue_.pop_front();
     auto tt_iter = tt_.find(hash);
     if (tt_iter != tt_.end()) {
