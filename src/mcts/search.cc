@@ -1282,7 +1282,9 @@ void SearchWorker::GatherMinibatch() {
           }
           minibatch_.erase(minibatch_.begin() + i);
         } else if (minibatch_[i].ooo_completed) {
-          FetchSingleNodeResult(&minibatch_[i], minibatch_[i], 0);
+          // TT hits are "fetched" and reconnected immediately.
+          if (!minibatch_[i].is_tt_hit)
+            FetchSingleNodeResult(&minibatch_[i], minibatch_[i], 0);
           DoBackupUpdateSingleNode(minibatch_[i]);
           minibatch_.erase(minibatch_.begin() + i);
           --minibatch_size;
@@ -1885,6 +1887,8 @@ void SearchWorker::ExtendNode(NodeToProcess& picked_node) {
   if (tt_low_node != nullptr) {
     picked_node.tt_low_node = tt_low_node;
     picked_node.is_tt_hit = true;
+    // "Fetch" the TT hit to avoid GC conflicts.
+    FetchSingleNodeResult(&picked_node, picked_node, 0);
   } else {
     picked_node.lock = NNCacheLock(search_->cache_, picked_node.hash);
     picked_node.is_cache_hit = picked_node.lock;
@@ -1916,7 +1920,10 @@ void SearchWorker::FetchMinibatchResults() {
   // Populate NN/cached results, or terminal results, into nodes.
   int idx_in_computation = 0;
   for (auto& node_to_process : minibatch_) {
-    FetchSingleNodeResult(&node_to_process, *computation_, idx_in_computation);
+    // TT hits are "fetched" and reconnected immediately.
+    if (!node_to_process.is_tt_hit)
+      FetchSingleNodeResult(&node_to_process, *computation_,
+                            idx_in_computation);
     if (node_to_process.ShouldAddToInput()) ++idx_in_computation;
   }
 }
