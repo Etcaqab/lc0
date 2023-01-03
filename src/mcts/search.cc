@@ -1968,15 +1968,17 @@ void SearchWorker::FetchSingleNodeResult(NodeToProcess* node_to_process,
 void SearchWorker::DoBackupUpdate() {
   // Nodes mutex for doing node updates.
   SharedMutex::Lock lock(search_->nodes_mutex_);
-  search_->dag_->TTGCSome(minibatch_.size());
 
   bool work_done = number_out_of_order_ > 0;
+  int non_collisions = 0;
   for (const NodeToProcess& node_to_process : minibatch_) {
     DoBackupUpdateSingleNode(node_to_process);
     if (!node_to_process.IsCollision()) {
       work_done = true;
+      non_collisions++;
     }
   }
+  if (non_collisions > 0) search_->dag_->TTGCSome(non_collisions);
   if (!work_done) return;
   search_->CancelSharedCollisions();
   search_->total_batches_ += 1;
