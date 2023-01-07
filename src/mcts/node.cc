@@ -707,6 +707,7 @@ void NodeTree::MakeMove(Move move) {
   new_head = current_head_->GetChild();
 
   // Move damaged node from TT to non-TT to avoid reuse.
+  // It can have TT parents, until they get garbage collected.
   if (current_head_->IsTT()) {
     auto tt_iter = tt_.find(current_head_->GetHash());
     tt_iter->second->ClearTT();
@@ -771,8 +772,11 @@ void NodeTree::DeallocateTree() {
   gamebegin_node_.reset();
   current_head_ = nullptr;
   // Free all nodes.
+  // There may be non-TT children of TT nodes that were not garbage collected
+  // fast enough.
   NonTTMaintenance();
   TTClear();
+  non_tt_.clear();
   gc_queue_.clear();
 }
 
@@ -795,6 +799,9 @@ void NodeTree::TTClear() {
   // Make sure destructors don't fail.
   absl::c_for_each(
       tt_, [](const auto& item) { item.second->ReleaseChildren(nullptr); });
+  // Remove any released non-TT children of TT nodes that were not garbage
+  // collected fast enough.
+  NonTTMaintenance();
   tt_.clear();
   gc_queue_.clear();
 }
