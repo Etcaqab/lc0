@@ -756,11 +756,6 @@ std::vector<EdgeAndNode> Search::GetBestChildrenNoTemperature(Node* parent,
             return a_playouts > b_playouts;
           }
 		  
-		 const float a_playouts = a.GetN() * std::pow(depth, 0.03f) * std::sqrt(a.GetN());//a_playouts = N(a) * depth^(0.7) * sqrt(N(a))
-         const float b_playouts = b.GetN() * std::pow(depth, 0.03f) * std::sqrt(b.GetN());//b_playouts = N(b) * depth^(0.7) * sqrt(N(b))
-	     if (a_playouts != b_playouts) {
-		    return a.GetQ(0.0f, a.GetN()) + depth > b.GetQ(0.0f, b.GetN()) + depth;
-		 }
 			
 		  const float a_m = a.GetM(0.0f);
           const float b_m = b.GetM(0.0f);
