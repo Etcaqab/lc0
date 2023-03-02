@@ -1677,7 +1677,7 @@ void SearchWorker::PickNodesToExtendTask(
       for (Node* child : node->VisitedNodes()) {
         int index = child->Index();
         visited_pol += child->GetP();
-        float q = child->GetQ(-0.618);
+        float q = child->GetQ(draw_score);
         current_util[index] = q + m_evaluator.GetM(child, q);
       }
       const float fpu =
