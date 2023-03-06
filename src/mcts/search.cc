@@ -709,7 +709,7 @@ std::vector<EdgeAndNode> Search::GetBestChildrenNoTemperature(Node* parent,
         const auto b_rank = GetEdgeRank(b);
         if (a_rank != b_rank) return a_rank > b_rank;
 		
-		else if (a_rank == kTerminalWin) {
+        else if (a_rank == kTerminalWin) {
 	     //Bonan
         // Both moves are terminal wins, prefer shorter wins.
         float a_q = a.GetQ(0.0f, draw_score);
@@ -727,7 +727,7 @@ std::vector<EdgeAndNode> Search::GetBestChildrenNoTemperature(Node* parent,
         float a_scaled_q = a_q / std::sqrt(static_cast<float>(a_depth));//a_scaled_q = y / sqrt(x)
         float b_scaled_q = b_q / std::sqrt(static_cast<float>(b_depth));//b_scaled_q = y / sqrt(x)	 
 		if ( a_scaled_q != b_scaled_q ) {
-            return  a_scaled_q * depth > a_scaled_q * depth;
+            return  a_scaled_q * depth > b_scaled_q * depth;
           }
           return a.GetM(0.0f) < b.GetM(0.0f);
         } 
@@ -766,7 +766,7 @@ std::vector<EdgeAndNode> Search::GetBestChildrenNoTemperature(Node* parent,
           return a.GetP() > b.GetP();
         }
 		
-		else if (a_rank == kTerminalLoss) {
+        else if (a_rank == kTerminalLoss) {
 	     //Bonan
         // Both moves are terminal loss, prefer longer losses.
 		// So here just flip what was done for kTerminalWins.
@@ -789,14 +789,8 @@ std::vector<EdgeAndNode> Search::GetBestChildrenNoTemperature(Node* parent,
           }
           return a.GetM(0.0f) > b.GetM(0.0f);
         } 
-
-        // Both variants are winning, prefer shortest win.
-        if (a_rank > kNonTerminal) {
-          return a.GetM(0.0f) < b.GetM(0.0f);
-        }
-
-        // Both variants are losing, prefer longest losses.
-        return a.GetM(0.0f) > b.GetM(0.0f);
+      
+        return a.GetM(0.0f) < b.GetM(0.0f);
       });
 
   if (count < static_cast<int>(edges.size())) {
