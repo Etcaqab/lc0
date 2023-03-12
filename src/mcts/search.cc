@@ -709,27 +709,27 @@ std::vector<EdgeAndNode> Search::GetBestChildrenNoTemperature(Node* parent,
         const auto b_rank = GetEdgeRank(b);
         if (a_rank != b_rank) return a_rank > b_rank;
 		
-        else if (a_rank == kTerminalWin) {
+		if (a_rank == kTerminalWin) {
 	     //Bonan
         // Both moves are terminal wins, prefer shorter wins.
         float a_q = a.GetQ(0.0f, draw_score);
         float b_q = b.GetQ(0.0f, draw_score);
         if (a_q != b_q) {
-        // Scale q values by the depth of the node.
-        const float a_depth = a.GetM(0.0f) * depth;
-        const float b_depth = b.GetM(0.0f) * depth;
+        // Scale q values by the depth of the node multiplied by policy.
+        const float a_depth = (a.GetM(0.0f) * depth) * std::pow(a.GetP(), 0.7f);
+        const float b_depth = (b.GetM(0.0f) * depth) * std::pow(b.GetP(), 0.7f);
         float a_scaled_q = a_q / std::sqrt(static_cast<float>(a_depth));//a_scaled_q = y / sqrt(x)
         float b_scaled_q = b_q / std::sqrt(static_cast<float>(b_depth));//b_scaled_q = y / sqrt(x)
-          return a_scaled_q > b_scaled_q;
+         
+        // Raise the scaled q values to a power lesser than 1 to put more weight on moves_left head and depth of node.
+		// Also flip GetM so higher moves_left can be used for a and lower moves_left can be used for b.
+		// So a_weighted_q is always greater than b_weighted_q.
+        float a_weighted_q = std::pow(a_scaled_q, 0.7f) * ((a.GetM(0.0f) > b.GetM(0.0f)) ? a.GetM(0.0f) : b.GetM(0.0f));
+        float b_weighted_q = std::pow(b_scaled_q, 0.7f) * ((a.GetM(0.0f) < b.GetM(0.0f)) ? a.GetM(0.0f) : b.GetM(0.0f));
+             return a_weighted_q > b_weighted_q;
              }
-		const float a_depth = a.GetM(0.0f) * depth;
-        const float b_depth = b.GetM(0.0f) * depth;
-        float a_scaled_q = a_q / std::sqrt(static_cast<float>(a_depth));//a_scaled_q = y / sqrt(x)
-        float b_scaled_q = b_q / std::sqrt(static_cast<float>(b_depth));//b_scaled_q = y / sqrt(x)	 
-		if ( a_scaled_q != b_scaled_q ) {
-            return  a_scaled_q * depth > b_scaled_q * depth;
-          }
-          return a.GetM(0.0f) < b.GetM(0.0f);
+		
+             return a.GetM(0.0f) < b.GetM(0.0f);
         } 
 
         // If both are terminal draws, try to make it shorter.
@@ -744,29 +744,37 @@ std::vector<EdgeAndNode> Search::GetBestChildrenNoTemperature(Node* parent,
           return a.GetM(0.0f) < b.GetM(0.0f);
         }
 
-        else if (a_rank == kNonTerminal) {
+        if (a_rank == kNonTerminal) {
          // Prefer largest playouts then eval then prior.
          if (a.GetN() != b.GetN()) return a.GetN() > b.GetN();
          // Default doesn't matter here so long as they are the same as either
          // both are N==0 (thus we're comparing equal defaults) or N!=0 and
          // default isn't used.
 		 if (a.GetQ(0.0f, draw_score) != b.GetQ(0.0f, draw_score)) {
-		 const float a_playouts = a.GetN() * std::pow(depth, 0.03f) * std::sqrt(a.GetN());//a_playouts = N(a) * depth^(0.7) * sqrt(N(a))
-         const float b_playouts = b.GetN() * std::pow(depth, 0.03f) * std::sqrt(b.GetN());//b_playouts = N(b) * depth^(0.7) * sqrt(N(b))
+		 const float a_playouts = a.GetN() * std::pow(depth, 0.9f) * std::sqrt(a.GetN());//a_playouts = N(a) * depth^(0.7) * sqrt(N(a))
+         const float b_playouts = b.GetN() * std::pow(depth, 0.9f) * std::sqrt(b.GetN());//b_playouts = N(b) * depth^(0.7) * sqrt(N(b))
             return a_playouts > b_playouts;
           }
-		  
 			
-		  const float a_m = a.GetM(0.0f);
-          const float b_m = b.GetM(0.0f);
-		   if (a_m != b_m) {
-             return a_m < b_m;
+		  const float a_depth = (a.GetP() * depth) * std::pow(a.GetM(0.0f), 0.7f);
+          const float b_depth = (b.GetP() * depth) * std::pow(b.GetM(0.0f), 0.7f);
+		  // The code below will result in more exploratory behavior and a greater focus on finding 
+		  // new moves rather than exploiting the known ones.
+		  // So here we give more weight to policy and depth of the nodes instead of higher eval. 
+		  float a_m = a_depth * std::pow(a.GetQ(0.0f, draw_score), 0.7f);
+          float b_m = b_depth * std::pow(b.GetQ(0.0f, draw_score), 0.7f);
+		  if (a_m != b_m) {
+             return a_m > b_m;
            }
-		  
+		   const int a_moves_left = a.GetM(0.0f);
+           const int b_moves_left = b.GetM(0.0f);
+           if (a_moves_left != b_moves_left) {
+              return a_moves_left < b_moves_left;
+                    }
           return a.GetP() > b.GetP();
         }
 		
-        else if (a_rank == kTerminalLoss) {
+		if (a_rank == kTerminalLoss) {
 	     //Bonan
         // Both moves are terminal loss, prefer longer losses.
 		// So here just flip what was done for kTerminalWins.
@@ -774,23 +782,33 @@ std::vector<EdgeAndNode> Search::GetBestChildrenNoTemperature(Node* parent,
         float b_q = b.GetQ(0.0f, draw_score);
         if (a_q != b_q) {
         // Scale q values by the depth of the node.
-        const float a_depth = a.GetM(0.0f) * depth;
-        const float b_depth = b.GetM(0.0f) * depth;
+        const float a_depth = (a.GetP() * depth) * std::pow(a.GetM(0.0f), 0.7f);
+        const float b_depth = (b.GetP() * depth) * std::pow(b.GetM(0.0f), 0.7f);
         float a_scaled_q = a_q / std::sqrt(static_cast<float>(a_depth));//a_scaled_q = y / sqrt(x)
         float b_scaled_q = b_q / std::sqrt(static_cast<float>(b_depth));//b_scaled_q = y / sqrt(x)
-          return a_scaled_q < b_scaled_q;
+        // Raise the scaled q values to a power lesser than 1 to put more weight on moves_left head and depth of node.
+		// Also flip GetM so higher moves_left can be used for a and lower moves_left can be used for b.
+		// So a_weighted_q is always greater than b_weighted_q.
+        float a_weighted_q = std::pow(a_scaled_q, 0.7f) * ((a.GetM(0.0f) > b.GetM(0.0f)) ? a.GetM(0.0f) : b.GetM(0.0f));
+        float b_weighted_q = std::pow(b_scaled_q, 0.7f) * ((a.GetM(0.0f) < b.GetM(0.0f)) ? a.GetM(0.0f) : b.GetM(0.0f));
+             return a_weighted_q > b_weighted_q;
              }
-		const float a_depth = a.GetM(0.0f) * depth;
-        const float b_depth = b.GetM(0.0f) * depth;
-        float a_scaled_q = a_q / std::sqrt(static_cast<float>(a_depth));//a_scaled_q = y / sqrt(x)
-        float b_scaled_q = b_q / std::sqrt(static_cast<float>(b_depth));//b_scaled_q = y / sqrt(x)	 
-		if ( a_scaled_q != b_scaled_q ) {
-            return a.GetM(0.0f) + depth > b.GetM(0.0f) - depth;
-          }
           return a.GetM(0.0f) > b.GetM(0.0f);
-        } 
-      
-        return a.GetM(0.0f) < b.GetM(0.0f);
+        }
+
+        // Both variants are winning, prefer shortest win.
+        /*if (a_rank > kNonTerminal) {
+          return a.GetM(0.0f) < b.GetM(0.0f);
+        }
+
+        // Both variants are losing, prefer longest losses.
+        return a.GetM(0.0f) > b.GetM(0.0f);*/
+		
+		/*return (a_rank >= kNonTerminal) ? 
+                  a.GetM(0.0f) < b.GetM(0.0f)
+		        : a.GetM(0.0f) > b.GetM(0.0f);
+        }*/
+		return a.GetM(0.0f) < b.GetM(0.0f);
       });
 
   if (count < static_cast<int>(edges.size())) {
