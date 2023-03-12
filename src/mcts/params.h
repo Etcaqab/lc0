@@ -42,10 +42,7 @@ class SearchParams {
   static void Populate(OptionsParser* options);
 
   // Parameter getters.
-  int GetMiniBatchSize() const { return kMiniBatchSize; }
-  int GetMaxPrefetchBatch() const {
-    return options_.Get<int>(kMaxPrefetchBatchId);
-  }
+  uint32_t GetMiniBatchSize() const { return kMiniBatchSize; }
   float GetCpuct(bool at_root) const { return at_root ? kCpuctAtRoot : kCpuct; }
   float GetCpuctBase(bool at_root) const {
     return at_root ? kCpuctBaseAtRoot : kCpuctBase;
@@ -108,9 +105,8 @@ class SearchParams {
   float GetOpponentDrawScore() const { return kDrawScoreOpponent; }
   float GetWhiteDrawDelta() const { return kDrawScoreWhite; }
   float GetBlackDrawDelta() const { return kDrawScoreBlack; }
-  int GetMaxOutOfOrderEvals() const { return kMaxOutOfOrderEvals; }
+  uint32_t GetMaxOutOfOrderEvals() const { return kMaxOutOfOrderEvals; }
   float GetNpsLimit() const { return kNpsLimit; }
-  int GetSolidTreeThreshold() const { return kSolidTreeThreshold; }
 
   int GetTaskWorkersPerSearchWorker() const {
     return kTaskWorkersPerSearchWorker;
@@ -141,7 +137,6 @@ class SearchParams {
 
   // Search parameter IDs.
   static const OptionId kMiniBatchSizeId;
-  static const OptionId kMaxPrefetchBatchId;
   static const OptionId kCpuctId;
   static const OptionId kCpuctAtRootId;
   static const OptionId kCpuctBaseId;
@@ -190,7 +185,6 @@ class SearchParams {
   static const OptionId kDrawScoreBlackId;
   static const OptionId kMaxOutOfOrderEvalsId;
   static const OptionId kNpsLimitId;
-  static const OptionId kSolidTreeThresholdId;
   static const OptionId kTaskWorkersPerSearchWorkerId;
   static const OptionId kMinimumWorkSizeForProcessingId;
   static const OptionId kMinimumWorkSizeForPickingId;
@@ -246,7 +240,6 @@ class SearchParams {
   const float kDrawScoreBlack;
   const int kMaxOutOfOrderEvals;
   const float kNpsLimit;
-  const int kSolidTreeThreshold;
   const int kTaskWorkersPerSearchWorker;
   const int kMinimumWorkSizeForProcessing;
   const int kMinimumWorkSizeForPicking;

@@ -27,6 +27,7 @@
 
 #pragma once
 
+#include <algorithm>
 #include <string>
 
 #include "chess/board.h"
@@ -99,11 +100,22 @@ GameResult operator-(const GameResult& res);
 class PositionHistory {
  public:
   PositionHistory() = default;
-  PositionHistory(const PositionHistory& other) = default;
+  PositionHistory(const PositionHistory& other) {
+    positions_.reserve(
+        std::max(other.positions_.size() + 1, other.positions_.capacity()));
+    positions_ = other.positions_;
+  }
   PositionHistory(PositionHistory&& other) = default;
 
-  PositionHistory& operator=(const PositionHistory& other) = default;
-  PositionHistory& operator=(PositionHistory&& other) = default;  
+  PositionHistory& operator=(const PositionHistory& other) {
+    if (this == &other) return *this;
+    positions_.clear();
+    positions_.reserve(
+        std::max(other.positions_.size() + 1, other.positions_.capacity()));
+    positions_ = other.positions_;
+    return *this;
+  }
+  PositionHistory& operator=(PositionHistory&& other) = default;
 
   // Returns first position of the game (or fen from which it was initialized).
   const Position& Starting() const { return positions_.front(); }

@@ -43,7 +43,8 @@ namespace lczero {
 struct IterationStats {
   int64_t time_since_movestart = 0;
   int64_t time_since_first_batch = 0;
-  int64_t total_nodes = 0;
+  int64_t total_visits = 0;
+  int64_t total_allocated_nodes = 0;
   int64_t nodes_since_movestart = 0;
   int64_t batches_since_movestart = 0;
   int average_depth = 0;

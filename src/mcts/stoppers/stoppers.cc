@@ -59,10 +59,10 @@ void ChainedSearchStopper::OnSearchDone(const IterationStats& stats) {
 bool VisitsStopper::ShouldStop(const IterationStats& stats,
                                StoppersHints* hints) {
   if (populate_remaining_playouts_) {
-    hints->UpdateEstimatedRemainingPlayouts(nodes_limit_ - stats.total_nodes);
+    hints->UpdateEstimatedRemainingPlayouts(nodes_limit_ - stats.total_visits);
   }
-  if (stats.total_nodes >= nodes_limit_) {
-    LOGFILE << "Stopped search: Reached visits limit: " << stats.total_nodes
+  if (stats.total_visits >= nodes_limit_) {
+    LOGFILE << "Stopped search: Reached visits limit: " << stats.total_visits
             << ">=" << nodes_limit_;
     return true;
   }
@@ -92,12 +92,14 @@ bool PlayoutsStopper::ShouldStop(const IterationStats& stats,
 ///////////////////////////
 
 namespace {
+// FIXME: This is too conservative.
 const size_t kAvgNodeSize =
-    sizeof(Node) + MemoryWatchingStopper::kAvgMovesPerPosition * sizeof(Edge);
+    sizeof(Node) + sizeof(LowNode) +
+    sizeof(NodeTree::TranspositionTable::slot_type) +
+    MemoryWatchingStopper::kAvgMovesPerPosition * sizeof(Edge);
 const size_t kAvgCacheItemSize =
-    NNCache::GetItemStructSize() + sizeof(CachedNNRequest) +
-    sizeof(CachedNNRequest::IdxAndProb) *
-        MemoryWatchingStopper::kAvgMovesPerPosition;
+    NNCache::GetItemStructSize() + sizeof(CachedNNRequest) + sizeof(NNEval) +
+    sizeof(Edge) * MemoryWatchingStopper::kAvgMovesPerPosition;
 }  // namespace
 
 MemoryWatchingStopper::MemoryWatchingStopper(int cache_size, int ram_limit_mb,
@@ -109,7 +111,21 @@ MemoryWatchingStopper::MemoryWatchingStopper(int cache_size, int ram_limit_mb,
   LOGFILE << "RAM limit " << ram_limit_mb << "MB. Cache takes "
           << cache_size * kAvgCacheItemSize / 1000000
           << "MB. Remaining memory is enough for " << GetVisitsLimit()
-          << " nodes.";
+          << " allocated nodes.";
+}
+
+bool MemoryWatchingStopper::ShouldStop(const IterationStats& stats,
+                                       StoppersHints* hints) {
+  if (populate_remaining_playouts_) {
+    hints->UpdateEstimatedRemainingPlayouts(nodes_limit_ -
+                                            stats.total_allocated_nodes);
+  }
+  if (stats.total_allocated_nodes >= nodes_limit_) {
+    LOGFILE << "Stopped search: Reached allocated node limit: "
+            << stats.total_allocated_nodes << ">=" << nodes_limit_;
+    return true;
+  }
+  return false;
 }
 
 ///////////////////////////
@@ -152,7 +168,7 @@ KldGainStopper::KldGainStopper(float min_gain, int average_interval)
 
 bool KldGainStopper::ShouldStop(const IterationStats& stats, StoppersHints*) {
   Mutex::Lock lock(mutex_);
-  const auto new_child_nodes = stats.total_nodes - 1.0;
+  const auto new_child_nodes = stats.total_visits - 1.0;
   if (new_child_nodes < prev_child_nodes_ + average_interval_) return false;
 
   const auto new_visits = stats.edge_n;

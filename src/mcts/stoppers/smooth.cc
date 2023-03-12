@@ -626,7 +626,7 @@ bool SmoothStopper::ShouldStop(const IterationStats& stats,
 void SmoothStopper::OnSearchDone(const IterationStats& stats) {
   manager_->UpdateEndOfMoveStats(stats.time_since_movestart,
                                  used_piggybank_.test_and_set(), deadline_ms_,
-                                 stats.total_nodes);
+                                 stats.total_visits);
 }
 
 }  // namespace

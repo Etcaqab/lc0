@@ -78,7 +78,7 @@ Position::Position(const ChessBoard& board, int rule50_ply, int game_ply)
 }
 
 uint64_t Position::Hash() const {
-  return HashCat({us_board_.Hash(), static_cast<unsigned long>(repetitions_)});
+  return us_board_.Hash();
 }
 
 std::string Position::DebugString() const { return us_board_.DebugString(); }
@@ -130,7 +130,7 @@ int PositionHistory::ComputeLastMoveRepetitions(int* cycle_length) const {
   // TODO(crem) implement hash/cache based solution.
   if (last.GetRule50Ply() < 4) return 0;
 
-  for (int idx = positions_.size() - 3; idx >= 0; idx -= 2) {
+  for (int idx = positions_.size() - 5; idx >= 0; idx -= 2) {
     const auto& pos = positions_[idx];
     if (pos.GetBoard() == last.GetBoard()) {
       *cycle_length = positions_.size() - 1 - idx;

@@ -38,11 +38,8 @@
 #ifndef DEFAULT_MINIBATCH_SIZE
 #define DEFAULT_MINIBATCH_SIZE 256
 #endif
-#ifndef DEFAULT_MAX_PREFETCH
-#define DEFAULT_MAX_PREFETCH 32
-#endif
 #ifndef DEFAULT_TASK_WORKERS
-#define DEFAULT_TASK_WORKERS 4
+#define DEFAULT_TASK_WORKERS 3
 #endif
 
 namespace lczero {
@@ -62,11 +59,6 @@ const OptionId SearchParams::kMiniBatchSizeId{
     "How many positions the engine tries to batch together for parallel NN "
     "computation. Larger batches may reduce strength a bit, especially with a "
     "small number of playouts."};
-const OptionId SearchParams::kMaxPrefetchBatchId{
-    "max-prefetch", "MaxPrefetch",
-    "When the engine cannot gather a large enough batch for immediate use, try "
-    "to prefetch up to X positions which are likely to be useful soon, and put "
-    "them into cache."};
 const OptionId SearchParams::kCpuctId{
     "cpuct", "CPuct",
     "cpuct_init constant from \"UCT search\" algorithm. Higher values promote "
@@ -274,10 +266,6 @@ const OptionId SearchParams::kNpsLimitId{
     "An option to specify an upper limit to the nodes per second searched. The "
     "accuracy depends on the minibatch size used, increasing for lower sizes, "
     "and on the length of the search. Zero to disable."};
-const OptionId SearchParams::kSolidTreeThresholdId{
-    "solid-tree-threshold", "SolidTreeThreshold",
-    "Only nodes with at least this number of visits will be considered for "
-    "solidification for improved cache locality."};
 const OptionId SearchParams::kTaskWorkersPerSearchWorkerId{
     "task-workers", "TaskWorkers",
     "The number of task workers to use to help the search worker."};
@@ -321,7 +309,6 @@ void SearchParams::Populate(OptionsParser* options) {
   // Here the uci optimized defaults" are set.
   // Many of them are overridden with training specific values in tournament.cc.
   options->Add<IntOption>(kMiniBatchSizeId, 1, 1024) = DEFAULT_MINIBATCH_SIZE;
-  options->Add<IntOption>(kMaxPrefetchBatchId, 0, 1024) = DEFAULT_MAX_PREFETCH;
   options->Add<FloatOption>(kCpuctId, 0.0f, 100.0f) = 1.745f;
   options->Add<FloatOption>(kCpuctAtRootId, 0.0f, 100.0f) = 1.745f;
   options->Add<FloatOption>(kCpuctBaseId, 1.0f, 1000000000.0f) = 38739.0f;
@@ -387,7 +374,6 @@ void SearchParams::Populate(OptionsParser* options) {
   options->Add<IntOption>(kDrawScoreWhiteId, -100, 100) = 0;
   options->Add<IntOption>(kDrawScoreBlackId, -100, 100) = 0;
   options->Add<FloatOption>(kNpsLimitId, 0.0f, 1e6f) = 0.0f;
-  options->Add<IntOption>(kSolidTreeThresholdId, 1, 2000000000) = 100;
   options->Add<IntOption>(kTaskWorkersPerSearchWorkerId, 0, 128) =
       DEFAULT_TASK_WORKERS;
   options->Add<IntOption>(kMinimumWorkSizeForProcessingId, 2, 100000) = 20;
@@ -469,8 +455,8 @@ SearchParams::SearchParams(const OptionsDict& options)
           1, static_cast<int>(options.Get<float>(kMaxOutOfOrderEvalsId) *
                               options.Get<int>(kMiniBatchSizeId)))),
       kNpsLimit(options.Get<float>(kNpsLimitId)),
-      kSolidTreeThreshold(options.Get<int>(kSolidTreeThresholdId)),
-      kTaskWorkersPerSearchWorker(options.Get<int>(kTaskWorkersPerSearchWorkerId)),
+      kTaskWorkersPerSearchWorker(
+          options.Get<int>(kTaskWorkersPerSearchWorkerId)),
       kMinimumWorkSizeForProcessing(
           options.Get<int>(kMinimumWorkSizeForProcessingId)),
       kMinimumWorkSizeForPicking(

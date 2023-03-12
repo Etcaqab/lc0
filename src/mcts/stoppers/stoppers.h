@@ -59,7 +59,7 @@ class VisitsStopper : public SearchStopper {
   int64_t GetVisitsLimit() const { return nodes_limit_; }
   bool ShouldStop(const IterationStats&, StoppersHints*) override;
 
- private:
+ protected:
   const int64_t nodes_limit_;
   const bool populate_remaining_playouts_;
 };
@@ -86,6 +86,7 @@ class MemoryWatchingStopper : public VisitsStopper {
   static constexpr size_t kAvgMovesPerPosition = 30;
   MemoryWatchingStopper(int cache_size, int ram_limit_mb,
                         bool populate_remaining_playouts);
+  bool ShouldStop(const IterationStats&, StoppersHints*) override;
 };
 
 // Stops after time budget is gone.

@@ -132,9 +132,8 @@ void SelfPlayGame::Play(int white_threads, int black_threads, bool training,
   bool blacks_move = tree_[0]->IsBlackToMove();
 
   // If we are training, verify that input formats are consistent.
-  if (training &&
-      options_[0].network->GetCapabilities().input_format !=
-          options_[1].network->GetCapabilities().input_format) {
+  if (training && options_[0].network->GetCapabilities().input_format !=
+                      options_[1].network->GetCapabilities().input_format) {
     throw Exception("Can't mix networks with different input format!");
   }
   // Take syzygy tablebases from player1 options.
@@ -162,6 +161,7 @@ void SelfPlayGame::Play(int white_threads, int black_threads, bool training,
     const int idx = blacks_move ? 1 : 0;
     if (!options_[idx].uci_options->Get<bool>(kReuseTreeId)) {
       tree_[idx]->TrimTreeAtHead();
+      tree_[idx]->TTClear();
     }
     {
       std::lock_guard<std::mutex> lock(mutex_);
@@ -180,7 +180,7 @@ void SelfPlayGame::Play(int white_threads, int black_threads, bool training,
       }
 
       search_ = std::make_unique<Search>(
-          *tree_[idx], options_[idx].network, std::move(responder),
+          tree_[idx].get(), options_[idx].network, std::move(responder),
           /* searchmoves */ MoveList(), std::chrono::steady_clock::now(),
           std::move(stoppers),
           /* infinite */ false, *options_[idx].uci_options, options_[idx].cache,
@@ -206,9 +206,8 @@ void SelfPlayGame::Play(int white_threads, int black_threads, bool training,
     max_eval_[0] = std::max(max_eval_[0], blacks_move ? best_l : best_w);
     max_eval_[1] = std::max(max_eval_[1], best_d);
     max_eval_[2] = std::max(max_eval_[2], blacks_move ? best_w : best_l);
-    if (enable_resign &&
-        move_number >=
-            options_[idx].uci_options->Get<int>(kResignEarliestMoveId)) {
+    if (enable_resign && move_number >= options_[idx].uci_options->Get<int>(
+                                            kResignEarliestMoveId)) {
       const float resignpct =
           options_[idx].uci_options->Get<float>(kResignPercentageId) / 100;
       if (options_[idx].uci_options->Get<bool>(kResignWDLStyleId)) {
@@ -296,10 +295,11 @@ void SelfPlayGame::Play(int white_threads, int black_threads, bool training,
       }
       // Append training data. The GameResult is later overwritten.
       NNCacheLock nneval =
-          search_->GetCachedNNEval(tree_[idx]->GetCurrentHead());
+          search_->GetCachedNNEval(tree_[idx]->GetPositionHistory());
       training_data_.Add(tree_[idx]->GetCurrentHead(),
                          tree_[idx]->GetPositionHistory(), best_eval,
-                         played_eval, best_is_proof, best_move, move, nneval);
+                         played_eval, best_is_proof, best_move, move, nneval,
+                         search_->GetParams().GetPolicySoftmaxTemp());
     }
     // Must reset the search before mutating the tree.
     search_.reset();
@@ -312,16 +312,9 @@ void SelfPlayGame::Play(int white_threads, int black_threads, bool training,
 }
 
 std::vector<Move> SelfPlayGame::GetMoves() const {
-  std::vector<Move> moves;
-  for (Node* node = tree_[0]->GetCurrentHead();
-       node != tree_[0]->GetGameBeginNode(); node = node->GetParent()) {
-    moves.push_back(node->GetParent()->GetEdgeToNode(node)->GetMove());
-  }
   std::vector<Move> result;
   Position pos = tree_[0]->GetPositionHistory().Starting();
-  while (!moves.empty()) {
-    Move move = moves.back();
-    moves.pop_back();
+  for (auto move : tree_[0]->GetMoves()) {
     if (!chess960_) move = pos.GetBoard().GetLegacyMove(move);
     pos = Position(pos, move);
     // Position already flipped, therefore flip the move if white to move.

@@ -460,6 +460,7 @@ if get_option('build_backends')
     includes += include_directories('src/neural/cuda/')
 
     cuda_arguments = ['-c', '@INPUT@', '-o', '@OUTPUT@',
+                      '-I', meson.source_root() + '/subprojects/abseil-cpp-20211102.0',
                       '-I', meson.current_source_dir() + '/src']
     if host_machine.system() == 'windows'
       if get_option('b_vscrt') == 'mt'
@@ -626,6 +627,15 @@ endif
 #############################################################################
 ## Dependencies
 #############################################################################
+
+  ## ~~~~~~
+  ## Abseil
+  ## ~~~~~~
+  # $ meson wrap install abseil-cpp
+  absl = subproject('abseil-cpp', default_options : ['warning_level=0'])
+  deps += absl.get_variable('absl_container_dep').as_system()
+  includes += absl.get_variable('absl_include_dir')
+
   ## ~~~~
   ## zlib
   ## ~~~~
