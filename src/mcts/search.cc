@@ -743,7 +743,7 @@ std::vector<EdgeAndNode> Search::GetBestChildrenNoTemperature(Node* parent,
           // Prefer shorter draws.
           return a.GetM(0.0f) < b.GetM(0.0f);
         }
-
+        //test changes.
         if (a_rank == kNonTerminal) {
          // Prefer largest playouts then eval then prior.
          if (a.GetN() != b.GetN()) return a.GetN() > b.GetN();
