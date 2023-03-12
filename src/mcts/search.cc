@@ -110,9 +110,9 @@ class MEvaluator {
     const float child_m = child.GetM(parent_m_);
     float m = std::clamp(m_slope_ * (child_m - parent_m_), -m_cap_, m_cap_);
     m *= FastSign(-q);
-	if (q_threshold_ > 0.0f && q_threshold_ < 1.0f) {
-    // This allows a smooth M effect with higher q thresholds, which is
-    // necessary for using MLH together with contempt.
+    if (q_threshold_ > 0.0f && q_threshold_ < 1.0f) {
+      // This allows a smooth M effect with higher q thresholds, which is
+      // necessary for using MLH together with contempt.
       q = std::max(0.0f, (std::abs(q) - q_threshold_)) / (1.0f - q_threshold_);
     }
     m *= a_constant_ + a_linear_ * std::abs(q) + a_square_ * q * q;
@@ -124,11 +124,6 @@ class MEvaluator {
     const float child_m = child->GetM();
     float m = std::clamp(m_slope_ * (child_m - parent_m_), -m_cap_, m_cap_);
     m *= FastSign(-q);
-	if (q_threshold_ > 0.0f && q_threshold_ < 1.0f) {
-    // This allows a smooth M effect with higher q thresholds, which is
-    // necessary for using MLH together with contempt.
-      q = std::max(0.0f, (std::abs(q) - q_threshold_)) / (1.0f - q_threshold_);
-    }
     m *= a_constant_ + a_linear_ * std::abs(q) + a_square_ * q * q;
     return m;
   }
@@ -204,6 +199,39 @@ void ApplyDirichletNoise(Node* node, float eps, double alpha) {
 }
 }  // namespace
 
+namespace {
+// WDL conversion formula based on random walk model.
+inline void WDLRescale(float& v, float& d, float wdl_rescale_ratio,
+                       float wdl_rescale_diff, float sign, bool invert) {
+  if (invert) {
+    wdl_rescale_diff = -wdl_rescale_diff;
+    wdl_rescale_ratio = 1.0f / wdl_rescale_ratio;
+  }
+  auto w = (1 + v - d) / 2;
+  auto l = (1 - v - d) / 2;
+  // Safeguard against numerical issues; skip WDL transformation if WDL is too
+  // extreme.
+  const float zero = 0.0001f;
+  const float one = 0.9999f;
+  if (w > zero && d > zero && l > zero && w < one && d < one && l < one) {
+    auto a = FastLog(1 / l - 1);
+    auto b = FastLog(1 / w - 1);
+    auto s = 2 / (a + b);
+    // Safeguard against unrealistically broad WDL distributions coming from
+    // the NN. Could be made into a parameter, but probably unnecessary.
+    if (!invert) s = std::min(1.4f, s);
+    auto mu = (a - b) / (a + b);
+    auto s_new = s * wdl_rescale_ratio;
+    if (invert) std::swap(s, s_new);
+    auto mu_new = mu + sign * s * s * wdl_rescale_diff;
+    auto w_new = FastLogistic((-1.0f + mu_new) / s_new);
+    auto l_new = FastLogistic((-1.0f - mu_new) / s_new);
+    v = w_new - l_new;
+    d = std::max(0.0f, 1.0f - w_new - l_new);
+  }
+}
+}  // namespace
+
 void Search::SendUciInfo() REQUIRES(nodes_mutex_) REQUIRES(counters_mutex_) {
   const auto max_pv = params_.GetMultiPv();
   const auto edges = GetBestChildrenNoTemperature(root_node_, max_pv, 0);
@@ -245,8 +273,22 @@ void Search::SendUciInfo() REQUIRES(nodes_mutex_) REQUIRES(counters_mutex_) {
     ++multipv;
     uci_infos.emplace_back(common_info);
     auto& uci_info = uci_infos.back();
-    const auto wl = edge.GetWL(default_wl);
-    const auto floatD = edge.GetD(default_d);
+    auto wl = edge.GetWL(default_wl);
+    auto floatD = edge.GetD(default_d);
+    auto wl_internal = wl;
+    auto d_internal = floatD;
+    // Only the diff effect is inverted, so we only need to call if diff != 0.
+    if (params_.GetPerspective() != "none" &&
+        params_.GetWDLRescaleDiff() != 0) {
+      auto sign = (params_.GetPerspective() == "auto" ||
+                   (params_.GetPerspective() == "black") ==
+                       played_history_.Last().IsBlackToMove())
+                      ? 1.0f
+                      : -1.0f;
+      WDLRescale(wl, floatD, params_.GetWDLRescaleRatio(),
+                 params_.GetWDLRescaleDiff() * params_.GetWDLEvalObjectivity(),
+                 sign, true);
+    }
     const auto q = edge.GetQ(default_q, draw_score);
     if (edge.IsTerminal() && wl != 0.0f) {
       uci_info.mate = std::copysign(
@@ -268,10 +310,12 @@ void Search::SendUciInfo() REQUIRES(nodes_mutex_) REQUIRES(counters_mutex_) {
       uci_info.score = wl * 10000;
     }
 
-    auto w =
-        std::max(0, static_cast<int>(std::round(500.0 * (1.0 + wl - floatD))));
-    auto l =
-        std::max(0, static_cast<int>(std::round(500.0 * (1.0 - wl - floatD))));
+    auto w = std::max(
+        0,
+        static_cast<int>(std::round(500.0 * (1.0 + wl_internal - d_internal))));
+    auto l = std::max(
+        0,
+        static_cast<int>(std::round(500.0 * (1.0 - wl_internal - d_internal))));
     // Using 1000-w-l so that W+D+L add up to 1000.0.
     auto d = 1000 - w - l;
     if (d < 0) {
@@ -375,36 +419,21 @@ inline float GetFpu(const SearchParams& params, Node* node, bool is_root_node,
 }
 
 inline float ComputeCpuct(const SearchParams& params, uint32_t N,
-                          bool is_root_node, int depth) {
-  const float cpuct = params.GetCpuct(is_root_node);
-  const float base = params.GetCpuctBase(is_root_node);
+                          bool is_root_node) {
+  const float init = params.GetCpuct(is_root_node);
   const float k = params.GetCpuctFactor(is_root_node);
-  float depth_factor = 1.0f;
-  if (depth <= 15) {
-    depth_factor += 0.1f * depth;
-  } else {
-    depth_factor += 0.01f * (depth);
-  }
-  const float a = (cpuct * 2.7f - cpuct * 0.9f) / tanh(5.0f);
-  const float b = cpuct - a * tanh(5.0f);
-  const float init = std::max(1.7f, std::min(2.5f, (std::fabs(b + a) * tanh(depth_factor)) * depth_factor));
-  // scale by depth factor 
-  // clamp to a maximum value of 2.5f and a minimum value of 1.7
+  const float base = params.GetCpuctBase(is_root_node);
   return init + (k ? k * FastLog((N + base) / base) : 0.0f);
 }
 }  // namespace
 
-std::vector<std::string> Search::GetVerboseStats(Node* node)  const { 
-
+std::vector<std::string> Search::GetVerboseStats(Node* node) const {
   const bool is_root = (node == root_node_);
-  const bool is_odd_depth = is_root;
+  const bool is_odd_depth = !is_root;
   const bool is_black_to_move = (played_history_.IsBlackToMove() == is_root);
   const float draw_score = GetDrawScore(is_odd_depth);
   const float fpu = GetFpu(params_, node, is_root, draw_score);
-  // Bonan
-  // If its root node we want depth to be 1 ,else we want the highest possible depth here so puct can be 2.5f.
-  const int depth = is_root ? 1 : 15;
-  const float cpuct = ComputeCpuct(params_, node->GetTotalVisits(), is_root, depth);
+  const float cpuct = ComputeCpuct(params_, node->GetTotalVisits(), is_root);
   const float U_coeff =
       cpuct * std::sqrt(std::max(node->GetChildrenVisits(), 1u));
   std::vector<EdgeAndNode> edges;
@@ -467,10 +496,13 @@ std::vector<std::string> Search::GetVerboseStats(Node* node)  const {
         up = -up;
         std::swap(lo, up);
       }
-      *oss << (lo == up                                                ? "(T) "
-               : lo == GameResult::DRAW && up == GameResult::WHITE_WON ? "(W) "
-               : lo == GameResult::BLACK_WON && up == GameResult::DRAW ? "(L) "
-                                                                       : "");
+      *oss << (lo == up
+                   ? "(T) "
+                   : lo == GameResult::DRAW && up == GameResult::WHITE_WON
+                         ? "(W) "
+                         : lo == GameResult::BLACK_WON && up == GameResult::DRAW
+                               ? "(L) "
+                               : "");
     }
   };
 
@@ -534,7 +566,7 @@ void Search::SendMovesStats() const REQUIRES(counters_mutex_) {
 }
 
 NNCacheLock Search::GetCachedNNEval(const PositionHistory& history) const {
-  const auto hash = history.HashLast(params_.GetCacheHistoryLength() + 1);
+  const auto hash = dag_->GetHistoryHash(history);
   NNCacheLock nneval(cache_, hash);
   return nneval;
 }
@@ -672,13 +704,12 @@ std::vector<EdgeAndNode> Search::GetBestChildrenNoTemperature(Node* parent,
     }
     edges.push_back(edge);
   }
- 
   const auto middle = (static_cast<int>(edges.size()) > count)
                           ? edges.begin() + count
                           : edges.end();
   std::partial_sort(
       edges.begin(), middle, edges.end(),
-      [draw_score, &depth](const auto& a, const auto& b) {
+      [draw_score](const auto& a, const auto& b) {
         // The function returns "true" when a is preferred to b.
 
         // Lists edge types from less desirable to more desirable.
@@ -708,29 +739,6 @@ std::vector<EdgeAndNode> Search::GetBestChildrenNoTemperature(Node* parent,
         const auto a_rank = GetEdgeRank(a);
         const auto b_rank = GetEdgeRank(b);
         if (a_rank != b_rank) return a_rank > b_rank;
-		
-		if (a_rank == kTerminalWin) {
-	     //Bonan
-        // Both moves are terminal wins, prefer shorter wins.
-        float a_q = a.GetQ(0.0f, draw_score);
-        float b_q = b.GetQ(0.0f, draw_score);
-        if (a_q != b_q) {
-        // Scale q values by the depth of the node multiplied by policy.
-        const float a_depth = (a.GetM(0.0f) * depth) * std::pow(a.GetP(), 0.7f);
-        const float b_depth = (b.GetM(0.0f) * depth) * std::pow(b.GetP(), 0.7f);
-        float a_scaled_q = a_q / std::sqrt(static_cast<float>(a_depth));//a_scaled_q = y / sqrt(x)
-        float b_scaled_q = b_q / std::sqrt(static_cast<float>(b_depth));//b_scaled_q = y / sqrt(x)
-         
-        // Raise the scaled q values to a power lesser than 1 to put more weight on moves_left head and depth of node.
-		// Also flip GetM so higher moves_left can be used for a and lower moves_left can be used for b.
-		// So a_weighted_q is always greater than b_weighted_q.
-        float a_weighted_q = std::pow(a_scaled_q, 0.7f) * ((a.GetM(0.0f) > b.GetM(0.0f)) ? a.GetM(0.0f) : b.GetM(0.0f));
-        float b_weighted_q = std::pow(b_scaled_q, 0.7f) * ((a.GetM(0.0f) < b.GetM(0.0f)) ? a.GetM(0.0f) : b.GetM(0.0f));
-             return a_weighted_q > b_weighted_q;
-             }
-		
-             return a.GetM(0.0f) < b.GetM(0.0f);
-        } 
 
         // If both are terminal draws, try to make it shorter.
         // Not safe to access IsTerminal if GetN is 0.
@@ -743,72 +751,27 @@ std::vector<EdgeAndNode> Search::GetBestChildrenNoTemperature(Node* parent,
           // Prefer shorter draws.
           return a.GetM(0.0f) < b.GetM(0.0f);
         }
-        //test changes.
+
+        // Neither is terminal, use standard rule.
         if (a_rank == kNonTerminal) {
-         // Prefer largest playouts then eval then prior.
-         if (a.GetN() != b.GetN()) return a.GetN() > b.GetN();
-         // Default doesn't matter here so long as they are the same as either
-         // both are N==0 (thus we're comparing equal defaults) or N!=0 and
-         // default isn't used.
-		 if (a.GetQ(0.0f, draw_score) != b.GetQ(0.0f, draw_score)) {
-		 const float a_playouts = a.GetN() * std::pow(depth, 0.9f) * std::sqrt(a.GetN());//a_playouts = N(a) * depth^(0.7) * sqrt(N(a))
-         const float b_playouts = b.GetN() * std::pow(depth, 0.9f) * std::sqrt(b.GetN());//b_playouts = N(b) * depth^(0.7) * sqrt(N(b))
-            return a_playouts > b_playouts;
+          // Prefer largest playouts then eval then prior.
+          if (a.GetN() != b.GetN()) return a.GetN() > b.GetN();
+          // Default doesn't matter here so long as they are the same as either
+          // both are N==0 (thus we're comparing equal defaults) or N!=0 and
+          // default isn't used.
+          if (a.GetQ(0.0f, draw_score) != b.GetQ(0.0f, draw_score)) {
+            return a.GetQ(0.0f, draw_score) > b.GetQ(0.0f, draw_score);
           }
-			
-		  const float a_depth = (a.GetP() * depth) * std::pow(a.GetM(0.0f), 0.7f);
-          const float b_depth = (b.GetP() * depth) * std::pow(b.GetM(0.0f), 0.7f);
-		  // The code below will result in more exploratory behavior and a greater focus on finding 
-		  // new moves rather than exploiting the known ones.
-		  // So here we give more weight to policy and depth of the nodes instead of higher eval. 
-		  float a_m = a_depth * std::pow(a.GetQ(0.0f, draw_score), 0.7f);
-          float b_m = b_depth * std::pow(b.GetQ(0.0f, draw_score), 0.7f);
-		  if (a_m != b_m) {
-             return a_m > b_m;
-           }
-		   const int a_moves_left = a.GetM(0.0f);
-           const int b_moves_left = b.GetM(0.0f);
-           if (a_moves_left != b_moves_left) {
-              return a_moves_left < b_moves_left;
-                    }
           return a.GetP() > b.GetP();
-        }
-		
-		if (a_rank == kTerminalLoss) {
-	     //Bonan
-        // Both moves are terminal loss, prefer longer losses.
-		// So here just flip what was done for kTerminalWins.
-        float a_q = a.GetQ(0.0f, draw_score);
-        float b_q = b.GetQ(0.0f, draw_score);
-        if (a_q != b_q) {
-        // Scale q values by the depth of the node.
-        const float a_depth = (a.GetP() * depth) * std::pow(a.GetM(0.0f), 0.7f);
-        const float b_depth = (b.GetP() * depth) * std::pow(b.GetM(0.0f), 0.7f);
-        float a_scaled_q = a_q / std::sqrt(static_cast<float>(a_depth));//a_scaled_q = y / sqrt(x)
-        float b_scaled_q = b_q / std::sqrt(static_cast<float>(b_depth));//b_scaled_q = y / sqrt(x)
-        // Raise the scaled q values to a power lesser than 1 to put more weight on moves_left head and depth of node.
-		// Also flip GetM so higher moves_left can be used for a and lower moves_left can be used for b.
-		// So a_weighted_q is always greater than b_weighted_q.
-        float a_weighted_q = std::pow(a_scaled_q, 0.7f) * ((a.GetM(0.0f) > b.GetM(0.0f)) ? a.GetM(0.0f) : b.GetM(0.0f));
-        float b_weighted_q = std::pow(b_scaled_q, 0.7f) * ((a.GetM(0.0f) < b.GetM(0.0f)) ? a.GetM(0.0f) : b.GetM(0.0f));
-             return a_weighted_q > b_weighted_q;
-             }
-          return a.GetM(0.0f) > b.GetM(0.0f);
         }
 
         // Both variants are winning, prefer shortest win.
-        /*if (a_rank > kNonTerminal) {
+        if (a_rank > kNonTerminal) {
           return a.GetM(0.0f) < b.GetM(0.0f);
         }
 
         // Both variants are losing, prefer longest losses.
-        return a.GetM(0.0f) > b.GetM(0.0f);*/
-		
-		/*return (a_rank >= kNonTerminal) ? 
-                  a.GetM(0.0f) < b.GetM(0.0f)
-		        : a.GetM(0.0f) > b.GetM(0.0f);
-        }*/
-		return a.GetM(0.0f) < b.GetM(0.0f);
+        return a.GetM(0.0f) > b.GetM(0.0f);
       });
 
   if (count < static_cast<int>(edges.size())) {
@@ -938,9 +901,7 @@ void Search::PopulateCommonIterationStats(IterationStats* stats) {
   stats->may_resign = true;
   stats->num_losing_edges = 0;
   stats->time_usage_hint_ = IterationStats::TimeUsageHint::kNormal;
-  // Bonan
-  // If root node hasn't finished first visit, none of this code is safe.
- 
+
   // If root node hasn't finished first visit, none of this code is safe.
   if (root_node_->GetN() > 0) {
     const auto draw_score = GetDrawScore(true);
@@ -984,7 +945,6 @@ void Search::PopulateCommonIterationStats(IterationStats* stats) {
     }
   }
 }
-  
 
 void Search::WatchdogThread() {
   LOGFILE << "Start a watchdog thread.";
@@ -1699,11 +1659,9 @@ void SearchWorker::PickNodesToExtendTask(
           current_util[i] = fpu + m_evaluator.GetDefaultM();
         }
       }
-	  // Bonan
-      // If its root node we want depth to be 1 ,else we want the highest possible depth here so puct can be 2.5f.
-	  const int depth = is_root_node ? 1 : 15;
+
       const float cpuct =
-          ComputeCpuct(params_, node->GetTotalVisits(), is_root_node, depth); //Root depth is 1 here.
+          ComputeCpuct(params_, node->GetTotalVisits(), is_root_node);
       const float puct_mult =
           cpuct * std::sqrt(std::max(node->GetChildrenVisits(), 1u));
       int cache_filled_idx = -1;
@@ -1984,7 +1942,7 @@ void SearchWorker::ExtendNode(NodeToProcess& picked_node) {
 
   // Check the transposition table first and NN cache second before asking for
   // NN evaluation.
-  picked_node.hash = history.HashLast(params_.GetCacheHistoryLength() + 1);
+  picked_node.hash = search_->dag_->GetHistoryHash(history);
   auto tt_low_node = search_->dag_->TTFind(picked_node.hash);
   if (tt_low_node != nullptr) {
     picked_node.tt_low_node = tt_low_node;
@@ -2038,10 +1996,27 @@ void SearchWorker::FetchSingleNodeResult(NodeToProcess* node_to_process,
 
     assert(tt_low_node != nullptr);
     node_to_process->tt_low_node = tt_low_node;
-
     if (is_tt_miss) {
-      node_to_process->tt_low_node->SetNNEval(
-          computation.GetNNEval(idx_in_computation).get());
+      auto nn_eval = computation.GetNNEval(idx_in_computation).get();
+      if (params_.GetPerspective() != "none") {
+        bool root_stm =
+            (params_.GetPerspective() == "auto"
+                 ? !(search_->played_history_.Last().IsBlackToMove())
+                 : (params_.GetPerspective() == "white"));
+        auto sign = (root_stm ^ node_to_process->history.IsBlackToMove())
+                        ? 1.0f
+                        : -1.0f;
+        if (params_.GetWDLRescaleRatio() != 1.0f ||
+            params_.GetWDLRescaleDiff() != 0.0f) {
+          float v = nn_eval->q;
+          float d = nn_eval->d;
+          WDLRescale(v, d, params_.GetWDLRescaleRatio(),
+                     params_.GetWDLRescaleDiff(), sign, false);
+          nn_eval->q = v;
+          nn_eval->d = d;
+        }
+      }
+      node_to_process->tt_low_node->SetNNEval(nn_eval);
     }
   }
 
@@ -2183,6 +2158,8 @@ void SearchWorker::DoBackupUpdateSingleNode(
        /* ++it in the body */) {
     n->FinalizeScoreUpdate(v, d, m, node_to_process.multivisit);
     if (n_to_fix > 0 && !n->IsTerminal()) {
+      // First part of the path might be never as it was removed and recreated.
+      n_to_fix = std::min(n_to_fix, n->GetN());
       n->AdjustForTerminal(v_delta, d_delta, m_delta, n_to_fix);
     }
 
@@ -2277,7 +2254,6 @@ bool SearchWorker::MaybeSetBounds(Node* p, float m, uint32_t* n_to_fix,
   auto upper = GameResult::BLACK_WON;
   for (const auto& edge : p->Edges()) {
     const auto [edge_lower, edge_upper] = edge.GetBounds();
-	//Bonan
     lower = std::max(edge_lower, lower);
     upper = std::max(edge_upper, upper);
 

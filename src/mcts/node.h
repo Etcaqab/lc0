@@ -31,6 +31,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstdint>
 #include <cstring>
 #include <iostream>
 #include <memory>
@@ -39,6 +40,7 @@
 #include "chess/board.h"
 #include "chess/callbacks.h"
 #include "chess/position.h"
+#include "mcts/params.h"
 #include "utils/mutex.h"
 
 namespace lczero {
@@ -233,6 +235,7 @@ template <bool is_const>
 class VisitedNode_Iterator;
 
 class LowNode;
+typedef std::list<uint64_t> GCQueue;
 class Node {
  public:
   using Iterator = Edge_Iterator<false>;
@@ -256,7 +259,7 @@ class Node {
   ~Node() { UnsetLowNode(); }
 
   // Trim node, resetting everything except parent, sibling, edge and index.
-  void Trim();
+  void Trim(GCQueue* gc_queue);
 
   // Get first child.
   Node* GetChild() const;
@@ -334,7 +337,7 @@ class Node {
   // Deletes all children except one.
   // The node provided may be moved, so should not be relied upon to exist
   // afterwards.
-  void ReleaseChildrenExceptOne(Node* node_to_save) const;
+  void ReleaseChildrenExceptOne(Node* node_to_save, GCQueue* gc_queue) const;
 
   // Returns move from the point of view of the player making it (if as_opponent
   // is false) or as opponent (if as_opponent is true).
@@ -373,6 +376,9 @@ class Node {
 
   void SetRepetition() { repetition_ = true; }
   bool IsRepetition() const { return repetition_; }
+
+  uint64_t GetHash() const;
+  bool IsTT() const;
 
   bool WLDMInvariantsHold() const;
 
@@ -432,42 +438,42 @@ static_assert(sizeof(Node) <= 64, "Node is too large");
 
 class LowNode {
  public:
-  LowNode()
-      : terminal_type_(Terminal::NonTerminal),
+  // For TT nodes.
+  LowNode(uint64_t hash)
+      : hash_(hash),
+        terminal_type_(Terminal::NonTerminal),
         lower_bound_(GameResult::BLACK_WON),
         upper_bound_(GameResult::WHITE_WON),
-        is_transposition(false) {}
-  // Init from from another low node, but use it for NNEval only.
+        is_transposition(false),
+        is_tt_(true) {}
+  // Init from another low node, but use it for NNEval only.
+  // For non-TT nodes.
   LowNode(const LowNode& p)
       : wl_(p.wl_),
+        hash_(p.hash_),
         d_(p.d_),
         m_(p.m_),
         num_edges_(p.num_edges_),
         terminal_type_(Terminal::NonTerminal),
         lower_bound_(GameResult::BLACK_WON),
         upper_bound_(GameResult::WHITE_WON),
-        is_transposition(false) {
+        is_transposition(false),
+        is_tt_(false) {
     assert(p.edges_);
     edges_ = std::make_unique<Edge[]>(num_edges_);
     std::memcpy(edges_.get(), p.edges_.get(), num_edges_ * sizeof(Edge));
   }
   // Init @edges_ with moves from @moves and 0 policy.
-  LowNode(const MoveList& moves)
-      : num_edges_(moves.size()),
-        terminal_type_(Terminal::NonTerminal),
-        lower_bound_(GameResult::BLACK_WON),
-        upper_bound_(GameResult::WHITE_WON),
-        is_transposition(false) {
-    edges_ = Edge::FromMovelist(moves);
-  }
-  // Init @edges_ with moves from @moves and 0 policy.
   // Also create the first child at @index.
-  LowNode(const MoveList& moves, uint16_t index)
-      : num_edges_(moves.size()),
+  // For non-TT nodes.
+  LowNode(uint64_t hash, const MoveList& moves, uint16_t index)
+      : hash_(hash),
+        num_edges_(moves.size()),
         terminal_type_(Terminal::NonTerminal),
         lower_bound_(GameResult::BLACK_WON),
         upper_bound_(GameResult::WHITE_WON),
-        is_transposition(false) {
+        is_transposition(false),
+        is_tt_(false) {
     edges_ = Edge::FromMovelist(moves);
     child_ = std::make_unique<Node>(edges_[index], index);
   }
@@ -534,12 +540,12 @@ class LowNode {
   void AdjustForTerminal(float v, float d, float m, uint32_t multivisit);
 
   // Deletes all children.
-  void ReleaseChildren();
+  void ReleaseChildren(GCQueue* gc_queue);
 
   // Deletes all children except one.
   // The node provided may be moved, so should not be relied upon to exist
   // afterwards.
-  void ReleaseChildrenExceptOne(Node* node_to_save);
+  void ReleaseChildrenExceptOne(Node* node_to_save, GCQueue* gc_queue);
 
   // Return move policy for edge/node at @index.
   const Edge& GetEdgeAt(uint16_t index) const;
@@ -571,6 +577,10 @@ class LowNode {
   uint16_t GetNumParents() const { return num_parents_; }
   bool IsTransposition() const { return is_transposition; }
 
+  uint64_t GetHash() const { return hash_; }
+  bool IsTT() const { return is_tt_; }
+  void ClearTT() { is_tt_ = !is_tt_; }
+
   bool WLDMInvariantsHold() const;
 
  private:
@@ -585,6 +595,8 @@ class LowNode {
   // perspective of the player-to-move for the position.
   // WL stands for "W minus L". Is equal to Q if draw score is 0.
   double wl_ = 0.0f;
+  // Position hash and a TT key.
+  uint64_t hash_ = 0;
 
   // 8 byte fields on 64-bit platforms, 4 byte on 32-bit.
   // Array of edges.
@@ -616,6 +628,8 @@ class LowNode {
   GameResult upper_bound_ : 2;
   // Low node is a transposition (for ever).
   bool is_transposition : 1;
+  // Low node is in TT, i.e. was not evaluated or was modified.
+  bool is_tt_ : 1;
 };
 
 // Check that LowNode still fits into an expected cache line size.
@@ -901,15 +915,19 @@ class NodeTree {
   typedef absl::flat_hash_map<uint64_t, std::unique_ptr<LowNode>>
       TranspositionTable;
 
+  // Apply search params.
+  NodeTree(const SearchParams& params)
+      : hash_history_length_(params.GetCacheHistoryLength() + 1) {}
+  // When search params are not available.
+  NodeTree() : hash_history_length_(1) {}
   ~NodeTree() { DeallocateTree(); }
+
   // Adds a move to current_head_.
   void MakeMove(Move move);
   // Resets the current head to ensure it doesn't carry over details from a
   // previous search.
   void TrimTreeAtHead();
   // Sets the position in the tree, trying to reuse the tree.
-  // If @auto_garbage_collect, old tree is garbage collected immediately. (may
-  // take some milliseconds)
   // Returns whether the new position is the same game as the old position (with
   // some moves added). Returns false, if the position is completely different,
   // or if it's shorter than before.
@@ -933,7 +951,11 @@ class NodeTree {
   // Evict unused low nodes from the Transposition Table.
   void TTMaintenance();
   // Clear the Transposition Table.
+  // NOTE: Safe only when non-TT nodes were already detached.
   void TTClear();
+  // Release the first @count items from TT GC list. @count == 0 means release
+  // all. Return true, if there is more to release.
+  bool TTGCSome(size_t count = 1);
 
   // Add a clone of low @node to special nodes outside of the Transposition
   // Table and return it.
@@ -941,13 +963,16 @@ class NodeTree {
 
   size_t AllocatedNodeCount() const { return tt_.size() + non_tt_.size(); };
 
+  // Get position hash used for TT nodes and NN cache.
+  uint64_t GetHistoryHash(const PositionHistory& history) const {
+    return history.HashLast(hash_history_length_);
+  }
+
  private:
   void DeallocateTree();
 
   // Evict unused non-TT low nodes.
   void NonTTMaintenance();
-  // Clear non-TT low nodes.
-  void NonTTClear();
 
   // A node which to start search from.
   Node* current_head_ = nullptr;
@@ -963,8 +988,11 @@ class NodeTree {
   // noise or incomplete information.
   std::vector<std::unique_ptr<LowNode>> non_tt_;
 
+  // History positions to hash in node hashes used in TT and NN cache.
+  int hash_history_length_;
+
   // Garbage collection queue.
-  std::list<std::unique_ptr<LowNode>> gc_queue_;
+  GCQueue gc_queue_;
 };
 
 }  // namespace lczero

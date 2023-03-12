@@ -97,7 +97,7 @@ void Benchmark::Run() {
       NNCache cache;
       cache.SetCapacity(option_dict.Get<int>(kNNCacheSizeId));
 
-      NodeTree tree;
+      NodeTree tree = {option_dict};
       tree.ResetToPosition(position, {});
 
       const auto start = std::chrono::steady_clock::now();

@@ -88,13 +88,13 @@ SelfPlayGame::SelfPlayGame(PlayerOptions white, PlayerOptions black,
                      SearchParams(*black.uci_options).GetHistoryFill(),
                      white.network->GetCapabilities().input_format) {
   orig_fen_ = opening.start_fen;
-  tree_[0] = std::make_shared<NodeTree>();
+  tree_[0] = std::make_shared<NodeTree>(*options_[0].uci_options);
   tree_[0]->ResetToPosition(orig_fen_, {});
 
   if (shared_tree) {
     tree_[1] = tree_[0];
   } else {
-    tree_[1] = std::make_shared<NodeTree>();
+    tree_[1] = std::make_shared<NodeTree>(*options_[1].uci_options);
     tree_[1]->ResetToPosition(orig_fen_, {});
   }
   int ply = 0;
