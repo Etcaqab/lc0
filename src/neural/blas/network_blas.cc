@@ -230,10 +230,11 @@ void BlasComputation<use_eigen>::MakeEncoderLayer(
     float* input = &head_buffer[0];
     float* QK = &head_buffer4[0];
     // Compress.
-    const auto hidden_channels = layer.mha.smolgen.compress.size() / d_model;
+    const auto hidden_channels =
+        layer.mha.smolgen.compress.size() / embedding_size;
     std::vector<float> temp1(batch_size * kSquares * hidden_channels);
     FullyConnectedLayer<use_eigen>::Forward1D(
-        batch_size * kSquares, d_model, hidden_channels, input,
+        batch_size * kSquares, embedding_size, hidden_channels, input,
         layer.mha.smolgen.compress.data(), (const float*)nullptr, NONE,
         temp1.data());
 
@@ -286,7 +287,7 @@ void BlasComputation<use_eigen>::MakeEncoderLayer(
   for (auto batch = size_t{0}; batch < batch_size; batch++) {
     auto batchStart = batch * kSquares * d_model;
 
-    float* QK = &head_buffer4[batchStart];
+    float* QK = &head_buffer4[batch * kSquares * kSquares * heads];
 
     const float* Q = &head_buffer2[batchStart];
     const float* K = &head_buffer3[batchStart];
@@ -342,7 +343,7 @@ void BlasComputation<use_eigen>::MakeEncoderLayer(
     // matmul(softmax(QK), V) for all heads per batch.
     float* attn = &head_buffer2[batchStart];
     const float* V = &head_buffer3[batchStart];
-    const float* QK = &head_buffer4[batchStart];
+    const float* QK = &head_buffer4[batch * kSquares * kSquares * heads];
     for (auto h = 0; h < heads; h++) {
       const float* A = &QK[h * kSquares * kSquares];
       const float* B = &V[h * depth];
