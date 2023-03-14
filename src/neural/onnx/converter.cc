@@ -357,14 +357,8 @@ std::string Converter::MakeEncoderLayer(
     OnnxBuilder* builder, const LegacyWeights::EncoderLayer& layer,
     int embedding_size, int heads, const std::string& encoder_in,
     const std::string& name, ActivationFunction activation, float alpha) {
-		
-  		
   const int d_model = layer.mha.q_b.size();
-  int offset = (heads - (d_model % heads)) % heads;
-  int adjusted_d_model = d_model - offset;
-  int adjusted_heads = heads + (offset / 64);
-  // Calculate depth using the adjusted values of d_model and adjusted_heads
-  const int depth = adjusted_d_model / adjusted_heads;
+  const int depth = d_model / heads;
 
   auto mha_shape =
       builder->AddInitializer("/const" + name + "/mha/shape",
