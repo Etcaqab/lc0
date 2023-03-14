@@ -645,13 +645,7 @@ void BlasComputation<use_eigen>::ComputeBlocking() {
           head_buffer.data(), weights_.ip3_pol_w.data(),
           weights_.ip3_pol_b.data(), NONE, head_buffer3.data());
 		  //Bonan
-	  const int heads = weights_.pol_encoder_head_count;
-	  int offset = (heads - (policy_d_model % heads)) % heads;
-      int adjusted_d_model = policy_d_model - offset;
-      int adjusted_heads = heads + (offset / 64);
-      // Calculate depth using the adjusted values of adjusted_d_model and adjusted_heads
-      const int depth = adjusted_d_model / adjusted_heads;
-      const float scaling = 1.0f / sqrtf(depth);// Bonan
+      const float scaling = 1.0f / sqrtf(policy_d_model);// Bonan
       for (auto batch = size_t{0}; batch < batch_size; batch++) {
         const float* A = &head_buffer2[batch * 64 * policy_d_model];
         const float* B = &head_buffer3[batch * 64 * policy_d_model];
