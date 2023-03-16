@@ -782,18 +782,18 @@ std::vector<EdgeAndNode> Search::GetBestChildrenNoTemperature(Node* parent,
          // both are N==0 (thus we're comparing equal defaults) or N!=0 and
          // default isn't used.
 		 if (a.GetQ(0.0f, draw_score) != b.GetQ(0.0f, draw_score)) {
-		 const float a_playouts = a.GetN() * std::pow(depth, 0.9f) * std::sqrt(a.GetN());//a_playouts = N(a) * depth^(0.7) * sqrt(N(a))
-         const float b_playouts = b.GetN() * std::pow(depth, 0.9f) * std::sqrt(b.GetN());//b_playouts = N(b) * depth^(0.7) * sqrt(N(b))
+		 const float a_playouts = a.GetN() * std::pow(depth, 0.7f) * std::sqrt(a.GetN());//a_playouts = N(a) * depth^(0.7) * sqrt(N(a))
+         const float b_playouts = b.GetN() * std::pow(depth, 0.7f) * std::sqrt(b.GetN());//b_playouts = N(b) * depth^(0.7) * sqrt(N(b))
             return a_playouts > b_playouts;
           }
 			
-		  const float a_depth = (a.GetP() * depth) * std::pow(a.GetM(0.0f), 0.7f);
-          const float b_depth = (b.GetP() * depth) * std::pow(b.GetM(0.0f), 0.7f);
+		  const float a_depth = (a.GetP() * depth) * std::pow((a.GetM(0.0f) > b.GetM(0.0f)) ? a.GetM(0.0f) : b.GetM(0.0f), 0.7f);
+          const float b_depth = (b.GetP() * depth) * std::pow((a.GetM(0.0f) < b.GetM(0.0f)) ? a.GetM(0.0f) : b.GetM(0.0f), 0.7f);
 		  // The code below will result in more exploratory behavior and a greater focus on finding 
 		  // new moves rather than exploiting the known ones.
 		  // So here we give more weight to policy and depth of the nodes instead of higher eval. 
-		  float a_m = a_depth * std::pow(a.GetQ(0.0f, draw_score), 0.7f);
-          float b_m = b_depth * std::pow(b.GetQ(0.0f, draw_score), 0.7f);
+		  float a_m = a_depth * std::pow(a.GetQ(0.0f, draw_score), 0.5f);
+          float b_m = b_depth * std::pow(b.GetQ(0.0f, draw_score), 0.5f);
 		  if (a_m != b_m) {
              return a_m > b_m;
            }
