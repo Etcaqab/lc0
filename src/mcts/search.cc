@@ -110,14 +110,18 @@ class MEvaluator {
     const float child_m = child.GetM(parent_m_);
     float m = std::clamp(m_slope_ * (child_m - parent_m_), -m_cap_, m_cap_);
     m *= FastSign(-q);
-    if (q_threshold_ > 0.0f && q_threshold_ < 1.0f) {
-      // This allows a smooth M effect with higher q thresholds, which is
-      // necessary for using MLH together with contempt.
-      q = std::max(0.0f, (std::abs(q) - q_threshold_)) / (1.0f - q_threshold_);
+    float q_mirror = q;
+    if (std::abs(q) > q_threshold_) {
+		// To check if q is greater than q_threshold regardless if its negative or positive.
+        // This allows a smooth M effect with higher q thresholds, which is
+        // necessary for using MLH together with contempt.
+        q_mirror = std::max(0.0f, (std::abs(q_mirror) - q_threshold_)) / (1.0f - q_threshold_);  
     }
-    m *= a_constant_ + a_linear_ * std::abs(q) + a_square_ * q * q;
+    m *= a_constant_ + a_linear_ * std::abs(q_mirror) + a_square_ * q_mirror * q_mirror;
     return m;
-  }
+}
+
+
 
   float GetM(Node* child, float q) const {
     if (!enabled_ || !parent_within_threshold_) return 0.0f;
@@ -133,7 +137,8 @@ class MEvaluator {
 
  private:
   static bool WithinThreshold(const Node* parent, float q_threshold) {
-    return std::abs(parent->GetQ(0.0f)) > q_threshold;
+    const float parent_q = parent->GetQ(0.0f);
+    return (parent_q > 0.0f && parent_q > q_threshold) || (parent_q < 0.0f && parent_q < -q_threshold);
   }
 
   const bool enabled_;
@@ -146,6 +151,7 @@ class MEvaluator {
   float parent_m_ = 0.0f;
   bool parent_within_threshold_ = false;
 };
+
 
 }  // namespace
 
