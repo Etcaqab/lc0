@@ -741,6 +741,7 @@ std::vector<EdgeAndNode> Search::GetBestChildrenNoTemperature(Node* parent,
           }
           return wl < 0.0 ? kTerminalLoss : kTerminalWin;
         };
+		
 
         // If moves have different outcomes, prefer better outcome.
         const auto a_rank = GetEdgeRank(a);
@@ -825,9 +826,10 @@ std::vector<EdgeAndNode> Search::GetBestChildrenNoTemperature(Node* parent,
         float b_weighted_q = std::pow(b_scaled_q, 0.7f) * ((a.GetM(0.0f) < b.GetM(0.0f)) ? a.GetM(0.0f) : b.GetM(0.0f));
              return a_weighted_q > b_weighted_q;
              }
-        }
-			
-       	return true;	
+          }
+	   	
+       	return true;
+	   
       });
 
   if (count < static_cast<int>(edges.size())) {
