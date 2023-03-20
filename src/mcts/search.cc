@@ -27,6 +27,7 @@
 
 #include "mcts/search.h"
 
+#include <utility>
 #include <algorithm>
 #include <array>
 #include <chrono>
@@ -715,7 +716,7 @@ std::vector<EdgeAndNode> Search::GetBestChildrenNoTemperature(Node* parent,
                           : edges.end();
   std::partial_sort(
       edges.begin(), middle, edges.end(),
-      [draw_score, &depth](const auto& a, const auto& b) {
+      [draw_score, depth](const auto& a, const auto& b) {
         // The function returns "true" when a is preferred to b.
 
         // Lists edge types from less desirable to more desirable.
@@ -744,9 +745,10 @@ std::vector<EdgeAndNode> Search::GetBestChildrenNoTemperature(Node* parent,
         // If moves have different outcomes, prefer better outcome.
         const auto a_rank = GetEdgeRank(a);
         const auto b_rank = GetEdgeRank(b);
-        if (a_rank != b_rank) return a_rank > b_rank;
+        // Had to remove rank comparison so the code can continue to the other if statements.
 		
-		if (a_rank == kTerminalWin) {
+		if ((a_rank == kTerminalWin) && (b_rank == kTerminalWin)) {
+		if (a.GetM(0.0f) != b.GetM(0.0f)) return a.GetM(0.0f) < b.GetM(0.0f);
 	     //Bonan
         // Both moves are terminal wins, prefer shorter wins.
         float a_q = a.GetQ(0.0f, draw_score);
@@ -765,13 +767,11 @@ std::vector<EdgeAndNode> Search::GetBestChildrenNoTemperature(Node* parent,
         float b_weighted_q = std::pow(b_scaled_q, 0.7f) * ((a.GetM(0.0f) < b.GetM(0.0f)) ? a.GetM(0.0f) : b.GetM(0.0f));
              return a_weighted_q > b_weighted_q;
              }
-		
-             return a.GetM(0.0f) < b.GetM(0.0f);
         } 
 
         // If both are terminal draws, try to make it shorter.
         // Not safe to access IsTerminal if GetN is 0.
-        if (a_rank == kNonTerminal && a.GetN() != 0 && b.GetN() != 0 &&
+        if (a_rank == kNonTerminal && b_rank == kNonTerminal && a.GetN() != 0 && b.GetN() != 0 &&
             a.IsTerminal() && b.IsTerminal()) {
           if (a.IsTbTerminal() != b.IsTbTerminal()) {
             // Prefer non-tablebase draws.
@@ -781,7 +781,7 @@ std::vector<EdgeAndNode> Search::GetBestChildrenNoTemperature(Node* parent,
           return a.GetM(0.0f) < b.GetM(0.0f);
         }
 
-        if (a_rank == kNonTerminal) {
+        if ((a_rank == kNonTerminal) && (b_rank == kNonTerminal)) {
          // Prefer largest playouts then eval then prior.
          if (a.GetN() != b.GetN()) return a.GetN() > b.GetN();
          // Default doesn't matter here so long as they are the same as either
@@ -791,8 +791,7 @@ std::vector<EdgeAndNode> Search::GetBestChildrenNoTemperature(Node* parent,
 		 const float a_playouts = a.GetN() * std::pow(depth, 0.7f) * std::sqrt(a.GetN());//a_playouts = N(a) * depth^(0.7) * sqrt(N(a))
          const float b_playouts = b.GetN() * std::pow(depth, 0.7f) * std::sqrt(b.GetN());//b_playouts = N(b) * depth^(0.7) * sqrt(N(b))
             return a_playouts > b_playouts;
-          }
-			
+          }			
 		  const float a_depth = (a.GetP() * depth) * std::pow((a.GetM(0.0f) > b.GetM(0.0f)) ? a.GetM(0.0f) : b.GetM(0.0f), 0.7f);
           const float b_depth = (b.GetP() * depth) * std::pow((a.GetM(0.0f) < b.GetM(0.0f)) ? a.GetM(0.0f) : b.GetM(0.0f), 0.7f);
 		  // The code below will result in more exploratory behavior and a greater focus on finding 
@@ -803,15 +802,11 @@ std::vector<EdgeAndNode> Search::GetBestChildrenNoTemperature(Node* parent,
 		  if (a_m != b_m) {
              return a_m > b_m;
            }
-		   const int a_moves_left = a.GetM(0.0f);
-           const int b_moves_left = b.GetM(0.0f);
-           if (a_moves_left != b_moves_left) {
-              return a_moves_left < b_moves_left;
-                    }
           return a.GetP() > b.GetP();
         }
 		
-		if (a_rank == kTerminalLoss) {
+		if ((a_rank == kTerminalLoss) && (b_rank == kTerminalLoss)) {
+		if (a.GetM(0.0f) != b.GetM(0.0f)) return a.GetM(0.0f) > b.GetM(0.0f);
 	     //Bonan
         // Both moves are terminal loss, prefer longer losses.
 		// So here just flip what was done for kTerminalWins.
@@ -830,22 +825,10 @@ std::vector<EdgeAndNode> Search::GetBestChildrenNoTemperature(Node* parent,
         float b_weighted_q = std::pow(b_scaled_q, 0.7f) * ((a.GetM(0.0f) < b.GetM(0.0f)) ? a.GetM(0.0f) : b.GetM(0.0f));
              return a_weighted_q > b_weighted_q;
              }
-          return a.GetM(0.0f) > b.GetM(0.0f);
         }
-
-        // Both variants are winning, prefer shortest win.
-        /*if (a_rank > kNonTerminal) {
-          return a.GetM(0.0f) < b.GetM(0.0f);
-        }
-
-        // Both variants are losing, prefer longest losses.
-        return a.GetM(0.0f) > b.GetM(0.0f);*/
 		
-		/*return (a_rank >= kNonTerminal) ? 
-                  a.GetM(0.0f) < b.GetM(0.0f)
-		        : a.GetM(0.0f) > b.GetM(0.0f);
-        }*/
-		return a.GetM(0.0f) < b.GetM(0.0f);
+		 return true;
+          
       });
 
   if (count < static_cast<int>(edges.size())) {
@@ -1002,7 +985,7 @@ void Search::PopulateCommonIterationStats(IterationStats* stats) {
       // If game is resignable, no need for moving quicker. This allows
       // proving mate when losing anyway for better score output.
       // Hardcoded resign threshold, because there is no available parameter.
-      if (n > 0 && q > -0.98f) {
+      if (n > 0 && q > -0.58f) {
         stats->may_resign = false;
       }
       if (max_n < n) {
