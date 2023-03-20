@@ -745,9 +745,9 @@ std::vector<EdgeAndNode> Search::GetBestChildrenNoTemperature(Node* parent,
         // If moves have different outcomes, prefer better outcome.
         const auto a_rank = GetEdgeRank(a);
         const auto b_rank = GetEdgeRank(b);
-        // Had to remove rank comparison so the code can continue to the other if statements.
-		
-		if ((a_rank == kTerminalWin) && (b_rank == kTerminalWin)) {
+        if (a_rank != b_rank)  return (a_rank > b_rank);
+				
+		if (a_rank == kTerminalWin) {
 		if (a.GetM(0.0f) != b.GetM(0.0f)) return a.GetM(0.0f) < b.GetM(0.0f);
 	     //Bonan
         // Both moves are terminal wins, prefer shorter wins.
@@ -771,7 +771,7 @@ std::vector<EdgeAndNode> Search::GetBestChildrenNoTemperature(Node* parent,
 
         // If both are terminal draws, try to make it shorter.
         // Not safe to access IsTerminal if GetN is 0.
-        if (a_rank == kNonTerminal && b_rank == kNonTerminal && a.GetN() != 0 && b.GetN() != 0 &&
+        if (a_rank == kNonTerminal && a.GetN() != 0 && b.GetN() != 0 &&
             a.IsTerminal() && b.IsTerminal()) {
           if (a.IsTbTerminal() != b.IsTbTerminal()) {
             // Prefer non-tablebase draws.
@@ -781,7 +781,7 @@ std::vector<EdgeAndNode> Search::GetBestChildrenNoTemperature(Node* parent,
           return a.GetM(0.0f) < b.GetM(0.0f);
         }
 
-        if ((a_rank == kNonTerminal) && (b_rank == kNonTerminal)) {
+        if (a_rank == kNonTerminal) {
          // Prefer largest playouts then eval then prior.
          if (a.GetN() != b.GetN()) return a.GetN() > b.GetN();
          // Default doesn't matter here so long as they are the same as either
@@ -805,7 +805,7 @@ std::vector<EdgeAndNode> Search::GetBestChildrenNoTemperature(Node* parent,
           return a.GetP() > b.GetP();
         }
 		
-		if ((a_rank == kTerminalLoss) && (b_rank == kTerminalLoss)) {
+		if (a_rank == kTerminalLoss) {
 		if (a.GetM(0.0f) != b.GetM(0.0f)) return a.GetM(0.0f) > b.GetM(0.0f);
 	     //Bonan
         // Both moves are terminal loss, prefer longer losses.
@@ -826,9 +826,8 @@ std::vector<EdgeAndNode> Search::GetBestChildrenNoTemperature(Node* parent,
              return a_weighted_q > b_weighted_q;
              }
         }
-		
-		 return true;
-          
+			
+       	return true;	
       });
 
   if (count < static_cast<int>(edges.size())) {
