@@ -802,7 +802,7 @@ std::vector<EdgeAndNode> Search::GetBestChildrenNoTemperature(Node* parent,
             return a_playouts > b_playouts;
           }			
 		  const float a_depth = ((a.GetP() * max_depth) / depth) * std::pow((a.GetM(0.0f) > b.GetM(0.0f)) ? a.GetM(0.0f) : b.GetM(0.0f), 0.7f);
-          const float b_depth = ((a.GetP() * max_depth) / depth) * std::pow((a.GetM(0.0f) < b.GetM(0.0f)) ? a.GetM(0.0f) : b.GetM(0.0f), 0.7f);
+          const float b_depth = ((b.GetP() * max_depth) / depth) * std::pow((a.GetM(0.0f) < b.GetM(0.0f)) ? a.GetM(0.0f) : b.GetM(0.0f), 0.7f);
 		  // The code below will result in more exploratory behavior and a greater focus on finding 
 		  // new moves rather than exploiting the known ones.
 		  // So here we give more weight to policy and depth of the nodes instead of higher eval. 
